@@ -454,7 +454,8 @@
     "plugin-inventory-management-remote-codec-patch.json",
     "plugin-inventory-management-api-codec-patch.json",
     "plugin-manager-management-probe-patch.json",
-    "plugin-bundle-proof-workers-patch.json"
+    "plugin-bundle-proof-workers-patch.json",
+    "guard-tools-pipeline-patch.json"
   ],
   "assetTrees": [
     "web-integration",

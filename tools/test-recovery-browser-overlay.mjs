@@ -12,7 +12,7 @@ const descriptor = JSON.parse(await readFile(path.join(output, 'recovery-runtime
 const rows = descriptor.overlays;
 assert.equal(rows.length, 4);
 for (const name of ['web-integration/es-compat.js','web-integration/startup.js',
-  'pdf-compat-patch.json','language-patch.json','web-integration/language.js']) {
+  'recovery-recipes/pdf-compat-patch.json','recovery-recipes/language-patch.json','web-integration/language.js']) {
   const bytes = await readFile(path.join(root,'app/src/main/assets',name));
   assert.equal(descriptor.overlayInputs[name],createHash('sha256').update(bytes).digest('hex'));
 }

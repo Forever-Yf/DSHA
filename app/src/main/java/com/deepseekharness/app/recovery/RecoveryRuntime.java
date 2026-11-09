@@ -51,8 +51,8 @@ public final class RecoveryRuntime {
   private static final String[] OVERLAY_INPUTS = {
     "web-integration/es-compat.js",
     "web-integration/startup.js",
-    "pdf-compat-patch.json",
-    "language-patch.json",
+    "recovery-recipes/pdf-compat-patch.json",
+    "recovery-recipes/language-patch.json",
     "web-integration/language.js"
   };
   private static final String POLICY_ROOT =

@@ -21,7 +21,7 @@ TARGETS = {
 MAX_SOURCE_BYTES = {'index.html': 1024 * 1024, 'client.pdf.js': 12 * 1024 * 1024,
                     'client-resources.js': 1024 * 1024, 'client-locale.js': 1024 * 1024}
 INPUT_ASSETS = ('web-integration/es-compat.js', 'web-integration/startup.js',
-                'pdf-compat-patch.json', 'language-patch.json', 'web-integration/language.js')
+                'recovery-recipes/pdf-compat-patch.json', 'recovery-recipes/language-patch.json', 'web-integration/language.js')
 CAPSULE_DEPENDENCIES = {
     **{'destructive-policy/' + name:
        PREFIX + 'dsha-destructive-policy/' + name
@@ -77,7 +77,7 @@ def source_files(archive: Path):
 
 def build(archive: Path, assets: Path, dsh_version: str):
     raw = source_files(archive)
-    spec = json.loads((assets / 'pdf-compat-patch.json').read_text(encoding='utf8'))
+    spec = json.loads((assets / 'recovery-recipes/pdf-compat-patch.json').read_text(encoding='utf8'))
     if spec.get('dshVersion') != dsh_version \
             or spec.get('module') != TARGETS['client.pdf.js'].removeprefix(PREFIX) \
             or spec.get('resourceModule') != TARGETS['client-resources.js'].removeprefix(PREFIX) \
@@ -96,7 +96,7 @@ def build(archive: Path, assets: Path, dsh_version: str):
     pdf = exact(pdf, spec['workerBefore'], 'new Blob([' + json.dumps(compatibility + '\n', ensure_ascii=False)
                 + ', _dsh_pdf_worker_default,')
     resources = exact(raw['client-resources.js'].decode('utf8'), spec['resourceBefore'], spec['resourceAfter'])
-    language = json.loads((assets / 'language-patch.json').read_text(encoding='utf8'))
+    language = json.loads((assets / 'recovery-recipes/language-patch.json').read_text(encoding='utf8'))
     if language.get('dshVersion') != dsh_version \
             or language.get('module') != TARGETS['client-locale.js'].removeprefix(PREFIX) \
             or not isinstance(language.get('patches'), list) or len(language['patches']) != 3 \

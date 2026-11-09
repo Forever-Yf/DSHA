@@ -1,5 +1,5 @@
 {
-  "dshVersion": "0.2.1-rc.2",
+  "dshVersion": "0.2.2-rc.1",
   "module": "@deepseek-ai/dsh-plugin-manager/lib/index.js",
   "patches": [
     {
@@ -61,6 +61,18 @@
     {
       "before": "\t\t\t\t\tconst bundle = (await this.listBundles()).find((item) => item.name === name);",
       "after": "\t\t\t\t\tconst bundle = (await this.listBundles(name)).find((item) => item.name === name);"
+    },
+    {
+      "before": "return Promise.resolve(this.readBundles().map((bundle) => ({",
+      "after": "return (await this.readBundles(dshaOnlyName)).map((bundle) => ({"
+    },
+    {
+      "before": "updatable: typeof updateRefusal(bundle, bundle.name) !== \"string\"\n\t\t\t})));",
+      "after": "updatable: typeof updateRefusal(bundle, bundle.name) !== \"string\"\n\t\t\t}));"
+    },
+    {
+      "before": "\t\treadBundles() {",
+      "after": "\t\tasync readBundles(dshaOnlyName) {"
     }
   ]
 }
