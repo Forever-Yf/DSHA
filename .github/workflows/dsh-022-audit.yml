@@ -44,6 +44,25 @@ jobs:
           python3 tools/audit-dsh-upgrade.py \
             --install app/build/dsh-upgrade-candidate \
             --output app/build/dsh-upgrade-candidate/compatibility-audit.json
+      - name: Preserve only mismatched published JS for patch porting
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import zipfile
+          base = Path("app/build/dsh-upgrade-candidate")
+          report = base / "compatibility-audit.json"
+          if report.exists():
+              rows = json.loads(report.read_text(encoding="utf-8"))["patchResults"]
+              modules = sorted({row["module"] for row in rows
+                                if row["status"] not in ("applicable", "already-present")})
+              with zipfile.ZipFile(base / "blocked-modules.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                  for module in modules:
+                      source = base / "node_modules" / module
+                      if source.is_file() and not source.is_symlink():
+                          archive.write(source, module)
+          PY
       - name: Preserve auditable npm lock and failure report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -53,5 +72,6 @@ jobs:
             app/build/dsh-upgrade-candidate/package.json
             app/build/dsh-upgrade-candidate/package-lock.json
             app/build/dsh-upgrade-candidate/compatibility-audit.json
+            app/build/dsh-upgrade-candidate/blocked-modules.zip
           if-no-files-found: warn
           retention-days: 14
