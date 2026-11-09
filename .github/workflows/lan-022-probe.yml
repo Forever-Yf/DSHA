@@ -7,6 +7,8 @@ on:
       - .github/workflows/lan-022-probe.yml
       - tools/dsh-runtime/package.json
       - tools/dsh-runtime/package-lock.json
+      - tools/test-lan-settings-contract-022.py
+      - app/src/main/assets/lan-settings-upstream-contract.json
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,6 +50,8 @@ jobs:
           print('LAN_022_SOURCE_START '+text[:700].replace('\n','\\n'))
           pathlib.Path('app/build/lan022-probe/lan-022-facts.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
+      - name: Enforce version-pinned LAN persistence source and negative controls
+        run: python3 tools/test-lan-settings-contract-022.py --node-modules app/build/lan022-probe/node_modules
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: lan-022-module-for-exact-host-review
