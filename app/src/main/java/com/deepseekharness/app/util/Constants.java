@@ -12,7 +12,7 @@ public final class Constants {
   public static final String PREFS = "deepseekharness";
 
   /** 当前维护仓库；作者与历史报告链接分别保持原来源。 */
-  public static final String REPOSITORY_URL = "https://github.com/DSH-APP/DSHA";
+  public static final String REPOSITORY_URL = "https://github.com/Forever-Yf/DSHA";
 
   public static final String SITE_HOST = "dsha.cc";
   public static final String SITE_URL = "https://" + SITE_HOST + "/";
@@ -39,7 +39,7 @@ public final class Constants {
    * 当前 APK 内置 dsh 版本（不是远端 latest 标签）。
    * 对应上游 deepseek-ai/deepseek-harness 仓库。
    */
-  public static final String DSH_VERSION = "0.2.1-rc.2";
+  public static final String DSH_VERSION = "0.2.2-rc.1";
 
   public static final String DSH_RUNTIME_ID = "dsh-v" + DSH_VERSION;
 

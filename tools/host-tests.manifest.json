@@ -2512,6 +2512,21 @@
       "environment": {},
       "reason": "Actual production Java ManagedPatchChain/ExactTextPatch full chains: fresh, prepared-repeat, canonical fallback, exact 1817 upgrade and broken V1 rejection/recovery. Independent APK archive admission also available.",
       "cli": "--jdk PATH; optional --apk PATH for exact built APK; pinned upstream and historical worker source, no device data."
+    },
+    {
+      "path": "tools/test-dsh-022-acceptance.mjs",
+      "stage": "runtime",
+      "reason": "Actual 0.2.2 native/PTC policy pipeline and JSON storage; memory-only tools and fixture native SDK; no physical device or paid API",
+      "args": [
+        "{managed}"
+      ],
+      "timeoutSeconds": 900,
+      "requires": [
+        "node24",
+        "managed"
+      ],
+      "environment": {},
+      "cli": "verified managed runtime directory"
     }
   ],
   "historicalExcluded": [

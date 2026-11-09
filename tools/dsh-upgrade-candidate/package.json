@@ -1,0 +1,9 @@
+{
+  "name": "dsha-dsh-022-compatibility-candidate",
+  "version": "0.2.2-rc.1",
+  "private": true,
+  "description": "Isolated DSH 0.2.2-rc.1 dependency graph for compatibility testing only; not APK input",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.2-rc.1"
+  }
+}

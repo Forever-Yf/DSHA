@@ -1,0 +1,41 @@
+name: DSH 0.2.2 compatibility port inputs
+on:
+  push:
+    branches: [upgrade/dsh-0.2.2-rc.1]
+    paths: [.github/workflows/dsh-022-port.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inputs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Prepare exact baseline and target trees without lifecycle scripts
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/port/old app/build/port/new app/build/port/artifacts
+          cp tools/dsh-runtime/package*.json app/build/port/old/
+          cp tools/dsh-upgrade-candidate/package.json app/build/port/new/
+          npm ci --prefix app/build/port/old --ignore-scripts --no-audit --no-fund
+          npm install --prefix app/build/port/new --ignore-scripts --no-audit --no-fund
+          node app/build/port/new/node_modules/@deepseek-ai/dsh/lib/bin.js --version
+          git archive --format=tar.gz HEAD > app/build/port/artifacts/source.tar.gz
+          tar -czf app/build/port/artifacts/new-runtime.tar.gz -C app/build/port/new .
+          tar -czf app/build/port/artifacts/old-deepseek.tar.gz -C app/build/port/old node_modules/@deepseek-ai package.json package-lock.json
+          cp "$(command -v node)" app/build/port/artifacts/node24
+          gzip app/build/port/artifacts/node24
+          sha256sum app/build/port/artifacts/* > app/build/port/artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dsh-022-port-inputs
+          path: app/build/port/artifacts/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error

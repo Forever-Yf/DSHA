@@ -1,3 +1,5 @@
+> **本 Fork 已发布真实 DSH 0.2.2-rc.1 APK。** [下载与验证说明](FORK.md) · [Release](https://github.com/Forever-Yf/DSHA/releases/tag/v0.2.2-rc.1-fork.1)。独立包名/签名，可与原版共存；以下上游说明按历史记录阅读。
+
 # DSHA
 
 <p align="center">

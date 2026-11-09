@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "dshVersion": "0.2.1-rc.2",
+  "dshVersion": "0.2.2-rc.1",
   "patches": [
     {
-      "before": "\t\t\tconst interruptible = running && continuable;",
+      "before": "\t\t\tconst interruptible = running && (continuable || sending && subagent === null);",
       "after": "\t\t\t// DSHA_STOP_WITH_DRAFT_V1: a pending/new draft must not hide cancellation of an ordinary turn.\n\t\t\tconst interruptible = running && !primaryStops && (subagent === null || continuable);"
     },
     {
@@ -23,7 +23,7 @@
       "after": "\t\t\t\t\"aria-multiline\": \"true\",\n\t\t\t\tenterKeyHint: \"enter\",\n\t\t\t\t\"aria-description\": \"回车换行，点击箭头发送；Ctrl / ⌘ + Enter 快捷发送\",\n\t\t\t\t\"data-dsha-enter-mode\": \"newline\",\n\t\t\t\t\"data-composer-input\": true,"
     },
     {
-      "before": "\t\t\t\tif (locked || editor === null) return;\n\t\t\t\tfocusDraftEditor(editor, revealSelection);",
+      "before": "\t\t\t\tif (locked || editor === null) return;\n\t\t\t\tif ((0, _deepseek_ai_dsh_client_ui_primitives.isMobileDevice)()) return;\n\t\t\t\tfocusDraftEditor(editor, revealSelection);",
       "after": "\t\t\t\t// DSHA_COMPOSER_EXPLICIT_FOCUS_V1：切换会话不自动唤起键盘。\n\t\t\t\tif (locked || editor === null || document.activeElement !== editor.getRootElement()) return;\n\t\t\t\trevealSelection();"
     }
   ]

@@ -118,7 +118,10 @@
     "web-integration/permission-full-access.js",
     "web-integration/session-interaction.js",
     "welcome-notice-patch.json",
-    "workspace-directory-policy-patch.json"
+    "workspace-directory-policy-patch.json",
+    "guard-tools-pipeline-patch.json",
+    "recovery-recipes/pdf-compat-patch.json",
+    "recovery-recipes/language-patch.json"
   ],
   "packagedTrees": [
     "app-integration",

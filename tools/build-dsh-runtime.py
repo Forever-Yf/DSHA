@@ -194,7 +194,10 @@ def patched_content(relative, data):
 \tif (!(entries === void 0 ? false : (await Promise.all(entries.map(async (entry) => {
 \t\tif (entry.isDirectory()) {
 \t\t\tconst records = state.tables.get(entry.name);
-\t\t\tif (records !== void 0) return loadTableRecords(records, versions, join(dir, entry.name));
+\t\t\tif (records !== void 0) {
+\t\t\t\tawait loadTableRecords(records, versions, join(dir, entry.name));
+\t\t\t\treturn true;
+\t\t\t}
 \t\t}
 \t\tif (entry.name === "global.json" && descriptor.hasGlobal) {
 \t\t\tconst global = await readRecord(join(dir, entry.name), versions);
@@ -219,7 +222,6 @@ def patched_content(relative, data):
             raise ValueError('上游 JSON 存储目录加载结构变化，必须重新检查')
         text = text.replace(scan, replacement)
         table_scan = '''\tconst files = await readdir(dir, { withFileTypes: true });
-\tconst hasDocuments = files.some((file) => file.name.endsWith(".json"));
 \tconst loaded = await Promise.all(files.map(async (file) => {
 \t\tif (!file.name.endsWith(".json")) return;
 \t\tconst key = file.name.slice(0, -5);
@@ -228,10 +230,12 @@ def patched_content(relative, data):
 \t\tif (record !== void 0) return [key, record];
 \t}));'''
         table_replacement = '''\tlet files;
+\tlet tablePresent = true;
 \ttry {
 \t\tfiles = await readdir(dir);
 \t} catch (error) {
 \t\tif (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+\t\ttablePresent = false;
 \t\tfiles = [];
 \t}
 \tconst listed = new Set(files);
@@ -239,7 +243,6 @@ def patched_content(relative, data):
 \tif (recent !== void 0) for (const key of recent) files.push(`${key}.json`);
 \tconst candidates = [...new Set(files)];
 \tlet hintedDocument = false;
-\tconst hasDocuments = candidates.some((file) => listed.has(file) && file.endsWith(".json"));
 \tconst loaded = await Promise.all(candidates.map(async (file) => {
 \t\tif (!file.endsWith(".json")) return;
 \t\tconst key = file.slice(0, -5);
@@ -255,7 +258,6 @@ def patched_content(relative, data):
             raise ValueError('上游 JSON 存储记录加载结构变化，必须重新检查')
         text = text.replace(table_scan, table_replacement)
         table_return = '''\tfor (const record of loaded) if (record !== void 0) records.set(...record);
-\treturn hasDocuments;
 }
 /** Read one record document; a foreign (unreadable or stale) one reads as absent. */
 async function readRecord(path, versions) {
@@ -266,7 +268,8 @@ async function readRecord(path, versions) {
 \t}
 }'''
         table_return_replacement = '''\tfor (const record of loaded) if (record !== void 0) records.set(...record);
-\treturn hasDocuments || hintedDocument;
+\t// A materialized empty table suppresses legacy bootstrap in 0.2.2.
+\treturn tablePresent || hintedDocument;
 }
 /**
 * Read and classify one record document. Malformed JSON and foreign versions
@@ -381,10 +384,9 @@ var DshaRecordHints = class {
 \t\t\t\tthrow error;
 \t\t\t}
 \t\t})());'''),
-            ('''\t\tawait this.tracked(rm(join(this.tableDir(table), `${key}.json`), { force: true }));''',
-             '''\t\tconst dir = this.tableDir(table);
-\t\tawait this.tracked(rm(join(dir, `${key}.json`), { force: true }));
-\t\tthis.dshaRecordHints.forget(dir, key);'''),
+            ('''\t\tawait this.tracked(this.removeDocuments(dir, unique));''',
+             '''\t\tawait this.tracked(this.removeDocuments(dir, unique));
+\t\tfor (const key of unique) this.dshaRecordHints.forget(dir, key);'''),
             ('''\t\tawait this.tracked(rename(path, moved));
 \t\treturn moved;''',
              '''\t\tawait this.tracked(rename(path, moved));

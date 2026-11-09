@@ -1,0 +1,76 @@
+name: DSH 0.2.2 upgrade compatibility audit (not a release)
+on:
+  push:
+    branches:
+      - upgrade/dsh-0.2.2-rc.1
+    paths:
+      - .github/workflows/dsh-022-audit.yml
+      - tools/dsh-upgrade-candidate/package.json
+      - tools/audit-dsh-upgrade.py
+      - app/src/main/assets/runtime-patches.json
+      - app/src/main/assets/*patch.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Enforce the upstream minimum Node version
+        run: |
+          node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 24 || (major === 24 && minor < 9)) { console.error("DSH 0.2.2 needs Node 24.9+"); process.exit(1); }'
+      - name: Resolve and install *isolated* Linux arm64 glibc npm candidate
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/dsh-upgrade-candidate
+          cp tools/dsh-upgrade-candidate/package.json app/build/dsh-upgrade-candidate/package.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund \
+            --os=linux --cpu=arm64 --libc=glibc --prefix app/build/dsh-upgrade-candidate
+          npm ci --ignore-scripts --no-audit --no-fund \
+            --os=linux --cpu=arm64 --libc=glibc --prefix app/build/dsh-upgrade-candidate
+          node app/build/dsh-upgrade-candidate/node_modules/@deepseek-ai/dsh/lib/bin.js --version
+      - name: Audit exact-byte patch and builder entrypoint compatibility
+        run: |
+          python3 tools/audit-dsh-upgrade.py \
+            --install app/build/dsh-upgrade-candidate \
+            --output app/build/dsh-upgrade-candidate/compatibility-audit.json
+      - name: Preserve only mismatched published JS for patch porting
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import zipfile
+          base = Path("app/build/dsh-upgrade-candidate")
+          report = base / "compatibility-audit.json"
+          if report.exists():
+              rows = json.loads(report.read_text(encoding="utf-8"))["patchResults"]
+              modules = sorted({row["module"] for row in rows
+                                if row["status"] not in ("applicable", "already-present")})
+              with zipfile.ZipFile(base / "blocked-modules.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                  for module in modules:
+                      source = base / "node_modules" / module
+                      if source.is_file() and not source.is_symlink():
+                          archive.write(source, module)
+          PY
+      - name: Preserve auditable npm lock and failure report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dsh-0.2.2-rc.1-isolated-candidate-NOT-AN-APK
+          path: |
+            app/build/dsh-upgrade-candidate/package.json
+            app/build/dsh-upgrade-candidate/package-lock.json
+            app/build/dsh-upgrade-candidate/compatibility-audit.json
+            app/build/dsh-upgrade-candidate/blocked-modules.zip
+          if-no-files-found: warn
+          retention-days: 14

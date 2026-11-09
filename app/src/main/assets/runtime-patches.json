@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "dshVersion": "0.2.1-rc.2",
+  "dshVersion": "0.2.2-rc.1",
   "active": [
     {
       "asset": "permission-full-access-patch.json"
@@ -120,6 +120,9 @@
       ]
     },
     {
+      "asset": "guard-tools-pipeline-patch.json"
+    },
+    {
       "asset": "guard-bash-patch.json",
       "markers": [
         "DSHA_REQUIRED_POLICY_V1"
@@ -139,7 +142,6 @@
     },
     {
       "asset": "retired-market-optional-patch.json",
-      "module": "@deepseek-ai/dsh-app-boot/lib/index.js",
       "markers": [
         "DSHA_RETIRED_MARKET_OPTIONAL_V1"
       ]

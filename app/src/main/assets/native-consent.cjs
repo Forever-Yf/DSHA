@@ -1,5 +1,5 @@
 'use strict';
-// APK-owned launcher query for production build170's authenticated 3090 bridge.
+// APK-owned launcher query for the authenticated 3090 bridge.
 // It accepts no address, path, token, headers or request body from callers.
 const fs = require('node:fs');
 const http = require('node:http');
@@ -33,7 +33,7 @@ function credential() {
   } finally { fs.closeSync(fd); }
 }
 function readConnection() {
-  return Object.freeze({ applicationId: 'dsh.android.client', generation: credential().generation });
+  return Object.freeze({ applicationId: 'io.github.foreveryf.dsha', generation: credential().generation });
 }
 function bridgeFetch(route, init = {}) {
   if (!['/device/consent', '/app/native-policy'].includes(route)
