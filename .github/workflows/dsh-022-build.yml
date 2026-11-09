@@ -1,0 +1,123 @@
+name: Build actual DSH 0.2.2 fork APK
+on:
+  push:
+    branches: [upgrade/dsh-0.2.2-rc.1]
+    paths:
+      - .github/workflows/dsh-022-build.yml
+      - tools/port-dsh-022.py
+      - tools/test-dsh-022-acceptance.mjs
+      - tools/fork-022-build.py
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: actual-dsh-022-build
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Restore pinned npm migration input
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/port/full app/build/port/input
+          gh api repos/Forever-Yf/DSHA/actions/artifacts/13649944282/zip > app/build/port/input.zip
+          echo 'f95f06a426bdcd8a6e41fb4399684e78e08d1c001876966eeb8b974d0394e9d8  app/build/port/input.zip' | sha256sum -c
+          unzip -q app/build/port/input.zip -d app/build/port/input
+          tar -xzf app/build/port/input/full-runtime.tar.gz -C app/build/port/full
+          python3 tools/port-dsh-022.py app/build/port/full
+      - name: Commit actual migrated source and dependency lock
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app tools
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat: port DSHA runtime and native identity to DSH 0.2.2-rc.1'
+            git push origin HEAD:upgrade/dsh-0.2.2-rc.1
+          fi
+      - name: Restore immutable upstream offline build inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download v0.2.1-rc.2 --repo DSH-APP/DSHA \
+            --pattern 'DSHA-0.2.1-rc.2-20261022.2100-source.zip' --dir "$RUNNER_TEMP"
+          export SOURCE_ZIP="$RUNNER_TEMP/DSHA-0.2.1-rc.2-20261022.2100-source.zip"
+          echo "ef134fe8713bfa4d6cf3bdea883be1591246d4b78ace16bd924f6d739188425a  $SOURCE_ZIP" | sha256sum -c
+          python3 - <<'PY'
+          import importlib.util,os,pathlib,shutil,sys,zipfile
+          sys.path.insert(0,'tools')
+          spec=importlib.util.spec_from_file_location('assets','tools/ci-assets.py')
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          with zipfile.ZipFile(os.environ['SOURCE_ZIP']) as z:
+              for target in sorted(mod.allowed()):
+                  matches=[i for i in z.infolist() if i.filename==target or i.filename.endswith('/'+target)]
+                  if len(matches)!=1: raise ValueError('SOURCE_ASSET_NOT_UNIQUE: '+target+': '+str(len(matches)))
+                  path=pathlib.Path(target);path.parent.mkdir(parents=True,exist_ok=True)
+                  with z.open(matches[0]) as source,path.open('wb') as output:shutil.copyfileobj(source,output)
+          mod.verify_sources()
+          PY
+      - name: Generate real Linux arm64 main runtime and content evidence
+        run: |
+          set -euo pipefail
+          python3 tools/prepare-dsh-runtime.py
+          python3 tools/prepare-backup-assets.py --write
+          python3 tools/prepare-runtime-descriptor.py --write
+          python3 tools/generate-third-party-notices.py
+          python3 tools/prepare-runtime-descriptor.py --check
+          python3 tools/check-third-party-notices.py --archive app/src/main/assets/dsh-runtime.bin
+      - name: Create verified host fixtures and run actual 0.2.2 startup checks
+        run: |
+          set -euo pipefail
+          python3 tools/prepare-test-runtime.py
+          managed=$(python3 -c 'import json; print(json.load(open("app/build/test-runtimes/current.json"))["managed"])')
+          node tools/smoke-dsh-runtime.mjs "$managed" app/build/fork-022/smoke-core
+          node tools/smoke-dsh-runtime.mjs "$managed" app/build/fork-022/smoke-builtins --builtins
+      - name: Install exact Android build toolchain
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;26.3.11579264'
+          chmod +x gradlew
+      - name: Assemble non-debuggable Standard release candidate
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleStandardRelease -Pdsha.unsignedPackage=true --no-daemon --max-workers=2
+      - name: Bind generated source and runtime receipts to candidate APK
+        run: |
+          set -euo pipefail
+          git add app/src/main/assets/dsh-runtime.inputs.json app/src/main/assets/managed-package-proofs.json app/src/main/assets/runtime-descriptor.json app/src/main/assets/licenses tools
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: bind 0.2.2 runtime bytes and notices to fork candidate'
+            git push origin HEAD:upgrade/dsh-0.2.2-rc.1
+          fi
+          mkdir -p app/build/fork-022/output
+          git rev-parse HEAD > app/build/fork-022/output/source-commit.txt
+          cp app/build/outputs/apk/standard/release/*unsigned.apk app/build/fork-022/output/
+          cp app/src/main/assets/dsh-runtime.inputs.json app/src/main/assets/runtime-descriptor.json app/build/fork-022/output/
+          sha256sum app/build/fork-022/output/*.apk > app/build/fork-022/output/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: actual-dsh-022-candidate-and-receipts
+          path: |
+            app/build/fork-022/output/
+            app/build/reports/
+            app/build/test-results/
+            app/build/locked-dsh-runtime/build-report.json
+          if-no-files-found: warn
+          retention-days: 14
