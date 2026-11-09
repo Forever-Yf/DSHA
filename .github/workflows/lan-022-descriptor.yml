@@ -19,7 +19,10 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, pathlib, sys
           sys.path.insert(0,'tools')
-          from verify_runtime_descriptor_source import verify
+          import importlib.util
+          spec=importlib.util.spec_from_file_location('descriptor_source', 'tools/verify-runtime-descriptor-source.py')
+          module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+          verify=module.verify
           root=pathlib.Path('.');assets=root/'app/src/main/assets'
           target=assets/'runtime-descriptor.json'
           d=json.loads(target.read_text())
