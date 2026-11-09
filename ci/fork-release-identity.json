@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "applicationId": "io.github.foreveryf.dsha",
+  "alias": "dsha-fork",
+  "certificateSha256": "c3af4c583626770512aa26bf070c22d7ebe94c3d796cffe73e24b2de04f62bd5",
+  "upstreamCertificate": false,
+  "requiresExistingPrivateKeyForUpdates": true
+}
