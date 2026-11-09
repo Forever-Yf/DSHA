@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='dsha-fork-key-',dir=os.environ.get('RUN
         (args.sealed_out/'signing-key-backup.sealed.json').write_text(json.dumps(backup,indent=2)+'\n')
     aligned=private/'aligned.apk'
     subprocess.run([str(tools/'zipalign'),'-P','16','-f','4',str(args.apk),str(aligned)],check=True)
-    signed=args.out/'dsha-0.2.2-rc.1-fork.3-arm64.apk'
+    signed=args.out/'dsha-0.2.2-rc.1-fork.4-arm64.apk'
     subprocess.run([str(tools/'apksigner'),'sign','--ks',str(store),'--ks-key-alias','dsha-fork','--ks-pass','env:DSHA_LOCAL_SIGN_PASS','--key-pass','env:DSHA_LOCAL_SIGN_PASS','--v1-signing-enabled','true','--v2-signing-enabled','true','--v3-signing-enabled','true','--v4-signing-enabled','false','--out',str(signed),str(aligned)],env=env,check=True)
     verification=subprocess.check_output([str(tools/'apksigner'),'verify','--min-sdk-version','23','--verbose','--print-certs',str(signed)],text=True)
     assert fingerprint in verification.lower()
