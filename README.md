@@ -1,4 +1,4 @@
-> **已确认的预发布故障（2026-11-09）：** `v0.2.2-rc.1-fork.1` 在运行环境维护的“准备应用工具”步骤会触发 `java.io.IOException: LAN_SETTINGS_VERSION`，阻止环境启动。**暂不建议新装此版。** 修复源码与通过的候选构建见 [PR #2](https://github.com/Forever-Yf/DSHA/pull/2)；同签名修复 APK 尚待恢复原 Fork 发布密钥。已安装用户不要清除 App 数据、卸载或强制格式化，等待同证书修复版。
+> **0.2.2 修复版已发布：** [下载 fork.2 ARM64 APK](https://github.com/Forever-Yf/DSHA/releases/tag/v0.2.2-rc.1-fork.2)。它修复了 `fork.1` 的 `LAN_SETTINGS_VERSION` 启动维护错误。注意：fork.2 使用新签名，与 fork.1 证书不同，Android 默认不允许直接覆盖；Root 签名绕过未验证。安装前备份数据，卸载旧版可能删除应用私有数据。`fork.1` 故障说明与修复过程见 [PR #2](https://github.com/Forever-Yf/DSHA/pull/2)。
 
 > **本 Fork 已发布真实 DSH 0.2.2-rc.1 APK。** [下载与验证说明](FORK.md) · [Release](https://github.com/Forever-Yf/DSHA/releases/tag/v0.2.2-rc.1-fork.1)。独立包名/签名，可与原版共存；以下上游说明按历史记录阅读。
 
