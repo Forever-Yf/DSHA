@@ -4,7 +4,7 @@
 
 ## DSH 与 npm 依赖
 
-- 当前 `@deepseek-ai/dsh` 为 **0.2.1-rc.2**。完整版本、来源与 integrity 见 `tools/dsh-runtime/package-lock.json`；各包原许可文件保留在运行归档中。
+- 当前 `@deepseek-ai/dsh` 为 **0.2.2-rc.1**。完整版本、来源与 integrity 见 `tools/dsh-runtime/package-lock.json`；各包原许可文件保留在运行归档中。
 - Office 入口 `@deepseek-ai/libreoffice-kit` **0.1.5**、WASM **0.1.5**：保留上游 NOTICE、licenses、sources 与预构建说明。DSHA 的字体路径适配见 `assets/office-fonts-patch.json`。
 - pnpm **10.34.5**（MIT）和 certifi **2026.7.22**（MPL-2.0）：版本和原包摘要由 `tools/runtime-tools.lock.json` 固定。CA 未关闭 TLS 核验。
 - 许可目录和实际依赖需结合归档成员检查；锁文件内其他平台可选依赖不等于已进入 arm64 APK。
@@ -126,5 +126,6 @@
 | `node_modules/@ubjs/node-win32-arm64-msvc` | 0.31.0-3 | MPL-2.0 | https://registry.npmjs.org/@ubjs/node-win32-arm64-msvc/-/node-win32-arm64-msvc-0.31.0-3.tgz |
 | `node_modules/@ubjs/node-win32-x64-msvc` | 0.31.0-3 | MPL-2.0 | https://registry.npmjs.org/@ubjs/node-win32-x64-msvc/-/node-win32-x64-msvc-0.31.0-3.tgz |
 | `node_modules/argparse` | 2.0.1 | Python-2.0 | https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz |
+| `node_modules/lru-cache` | 11.5.3 | BlueOak-1.0.0 | https://registry.npmjs.org/lru-cache/-/lru-cache-11.5.3.tgz |
 
 GPL、MPL、LGPL 等组件的具体再分发义务应按相应包和修改范围核对。源码入口与许可副本不等于已证明所有上游二进制可逐字节重现。
