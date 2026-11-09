@@ -1,0 +1,58 @@
+name: Probe DSH 0.2.2 LAN settings compiled module
+on:
+  push:
+    branches:
+      - fix/lan-settings-022-startup
+    paths:
+      - .github/workflows/lan-022-probe.yml
+      - tools/dsh-runtime/package.json
+      - tools/dsh-runtime/package-lock.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  module:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install locked Linux ARM64 runtime into a temporary test directory
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/lan022-probe
+          cp tools/dsh-runtime/package.json tools/dsh-runtime/package-lock.json app/build/lan022-probe/
+          npm ci --prefix app/build/lan022-probe --os=linux --cpu=arm64 --libc=glibc --ignore-scripts --no-audit --no-fund
+      - name: Report actual published module hash and Host settings semantics
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,pathlib
+          root=pathlib.Path('app/build/lan022-probe/node_modules')
+          module=root/'@deepseek-ai/dsh-client-ui-settings/lib/client.js'
+          content=module.read_bytes()
+          text=content.decode('utf-8')
+          anchors=[
+            'Shared entry values and ordered writes over the Host configuration mirror.',
+            'remote.settings.mutate(',
+            'remote.settings.describe(',
+            'remote.settings',
+            'isLoopback ? "host" : "memory"',
+          ]
+          result={'module':str(module.relative_to(root)),'sha256':hashlib.sha256(content).hexdigest(),
+                  'bytes':len(content),'anchors':{s:text.count(s) for s in anchors}}
+          print('LAN_022_COMPILED_MODULE '+json.dumps(result,ensure_ascii=False))
+          print('LAN_022_SOURCE_START '+text[:700].replace('\n','\\n'))
+          pathlib.Path('app/build/lan022-probe/lan-022-facts.json').write_text(json.dumps(result,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lan-022-module-for-exact-host-review
+          path: |
+            app/build/lan022-probe/lan-022-facts.json
+            app/build/lan022-probe/node_modules/@deepseek-ai/dsh-client-ui-settings/lib/client.js
+          retention-days: 7
+          if-no-files-found: error
