@@ -1,0 +1,64 @@
+name: Publish verified upstream DSHA 0.2.1 APK mirror (not DSH 0.2.2)
+
+on:
+  push:
+    branches:
+      - delivery/upstream-0.2.1-baseline
+    paths:
+      - .github/workflows/publish-upstream-baseline-apk.yml
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Download untouched upstream officially signed APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/dsha-baseline"
+          gh release download v0.2.1-rc.2 --repo DSH-APP/DSHA \
+            --pattern 'dsha-0.2.1-rc.2.apk' --dir "$RUNNER_TEMP/dsha-baseline"
+      - name: Verify exact official asset SHA-256 and size
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/dsha-baseline"
+          printf '%s  %s\n' 'd62f17f23a7949f0f25285ec7afa44cb35de24a6bc91887ba4600023d18ffee0' 'dsha-0.2.1-rc.2.apk' | sha256sum --check --status
+          test "$(stat -c '%s' dsha-0.2.1-rc.2.apk)" -eq 292198739
+          printf '%s  %s\n' 'd62f17f23a7949f0f25285ec7afa44cb35de24a6bc91887ba4600023d18ffee0' 'dsha-0.2.1-rc.2.apk' > dsha-0.2.1-rc.2.apk.sha256
+      - name: Publish verified byte-identical mirror as explicitly labeled prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='v0.2.1-rc.2-upstream-mirror'
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; do not mutate or overwrite."
+            exit 0
+          fi
+          cat > "$RUNNER_TEMP/dsha-baseline/RELEASE_NOTES.md" <<'EOF'
+          ## 官方 DSHA 0.2.1-rc.2 APK 镜像（不是 0.2.2）
+
+          此 Release 提供从 [DSH-APP/DSHA v0.2.1-rc.2](https://github.com/DSH-APP/DSHA/releases/tag/v0.2.1-rc.2) 下载且 **逐字节 SHA-256 验证** 的原版 APK，方便从此 Fork 的 Releases 直接下载。
+
+          - Android APK：`dsha-0.2.1-rc.2.apk`
+          - 内置 DSH：**0.2.1-rc.2**（**尚未升级到 0.2.2-rc.1**）
+          - 原始 APK 大小：292,198,739 字节
+          - SHA-256：`d62f17f23a7949f0f25285ec7afa44cb35de24a6bc91887ba4600023d18ffee0`
+          - 发布签名：原上游 APK 既有签名，未重新签名、未重打包。
+          - 0.2.2 升级工作：[Fork 草稿 PR #1](https://github.com/Forever-Yf/DSHA/pull/1)（需要移植不兼容补丁，未提供升级版 APK）。
+
+          **注意：** 此 Release 不是本 Fork 自行编译的新版本、不是 0.2.2 版本。不要下载后误认为已获得 0.2.2 的新功能。旧 Android 应用身份/签名与数据升级行为，请以原发布说明为准。
+          EOF
+          gh release create "$tag" \
+            "$RUNNER_TEMP/dsha-baseline/dsha-0.2.1-rc.2.apk" \
+            "$RUNNER_TEMP/dsha-baseline/dsha-0.2.1-rc.2.apk.sha256" \
+            --repo "$GITHUB_REPOSITORY" --target main --prerelease \
+            --title "DSHA 0.2.1-rc.2 · 上游官方 APK 镜像（非 0.2.2）" \
+            --notes-file "$RUNNER_TEMP/dsha-baseline/RELEASE_NOTES.md"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json url,assets --jq '{url: .url, files: [.assets[].name]}'
