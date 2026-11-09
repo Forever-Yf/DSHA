@@ -55,7 +55,7 @@ subprocess.run(['node', 'tools/test-storage-json-proroot-dirent.mjs', str(manage
 subprocess.run([sys.executable, 'tools/prepare-linux-aapt2-pin.py'], cwd=ROOT, check=True)
 # Exercise the actual Java patch-chain engine against every locked npm module,
 # including the second idempotent application that happens during phone startup.
-tests = ['ManagedPatchRegistryIntegrationTest', 'ManagedPatchChainTest', 'ExactTextPatchTest', 'NativeConsentPolicyTest', 'DeviceShellPolicyTest', 'ShellQuoteTest', 'BackupScopeTest', 'CredentialPathsTest', 'BridgeCredentialAuthTest', 'SelfPackageIdentityTest', 'RuntimeDescriptorTest', 'DataFormatEvidenceTest']
+tests = ['ManagedPatchRegistryIntegrationTest', 'ManagedPatchChainTest', 'ExactTextPatchTest', 'NativeConsentPolicyTest', 'DeviceShellPolicyTest', 'ShellQuoteTest', 'BackupScopeTest', 'CredentialPathsTest', 'BridgeCredentialAuthTest', 'SelfPackageIdentityTest', 'RuntimeDescriptorTest', 'DataFormatEvidenceTest', 'RuntimeToolsRegistryAndroidTest']
 command = [str(binary), ':app:testStandardDebugUnitTest']
 for name in tests:
     command += ['--tests', '*.' + name]
