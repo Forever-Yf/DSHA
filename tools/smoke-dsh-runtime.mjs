@@ -64,6 +64,13 @@ try {
     catch (error) { if (attempt === 14) throw error; await new Promise(done => setTimeout(done, 400)); }
   }
   if (exchange.status !== 303 || !['/', './'].includes(exchange.headers.get('location'))) throw new Error('启动凭据未获得 303 根路径跳转');
+  // Do not mistake a working Web login for successful startup of the builtins.
+  // DSH 0.2.2 skips bundles with exact 0.2.1 peer pins while still serving HTTP 200.
+  // Check the actual host stderr/stdout, not merely the declared profile list.
+  if (plugins.length) {
+    const skipped = [...log.matchAll(/dsh:\s*skipping profile bundle\s+"([^"]+)"/g)].map(match => match[1]);
+    if (skipped.length) throw new Error('DSHA_BUILTIN_BUNDLE_SKIPPED: ' + [...new Set(skipped)].join(', '));
+  }
   const cookie = exchange.headers.get('set-cookie')?.split(';')[0];
   if (!cookie?.startsWith('dsh-auth-')) throw new Error('官方 Cookie 缺失');
   const base = `http://127.0.0.1:${port}/`;
@@ -224,7 +231,7 @@ try {
     } finally { await browser.close(); }
   }
   console.log(JSON.stringify({ status: 'PASS', auth: '303 + Cookie + HTTP 200', unauthenticated: 401,
-    invalidToken: 401, htmlBytes: Buffer.byteLength(html), plugins, platform: process.platform, arch: process.arch }));
+    invalidToken: 401, htmlBytes: Buffer.byteLength(html), plugins, skippedBundles: 0, platform: process.platform, arch: process.arch }));
   if (process.argv.includes('--hold')) {
     writeFileSync(resolve(home,'connection.json'),JSON.stringify({authUrl,base,port}),{mode:0o600});
     const until=Date.now()+300000;
