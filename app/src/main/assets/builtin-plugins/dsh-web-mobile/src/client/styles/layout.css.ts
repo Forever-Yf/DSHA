@@ -71,7 +71,8 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
   html [data-mobile-nav="frame"] {
     box-sizing: border-box !important;
     position: relative !important;
-    grid-template-columns: minmax(0, 1fr) 0 0 !important;
+    /* Native DSH 0.2.2 owns its three grid columns, with main in column 2.
+       A legacy override setting column 2 to 0 produces a completely blank UI. */
     padding-top: env(safe-area-inset-top, 0px) !important;
     /* Bottom safe area, symmetric with the top inset above. It MUST stay in
        this rule: box-sizing: border-box is the pair that makes the padding eat
@@ -86,6 +87,10 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
        declaration and this one are the same property with the same value, so
        they do not stack. */
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
+
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) {
+    grid-template-columns: minmax(0, 1fr) 0 0 !important;
   }
 
   /* The sidebar column (first grid child) becomes a left drawer. The drawer
@@ -108,7 +113,7 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
      position/inset/width on the element, the column kept a correct-looking box
      while neither painting nor hit-testing, which is the "all black, click
      anywhere closes" root cause. The backdrop we append carries the dimming. */
-  [data-mobile-nav="frame"] > :first-child {
+  [data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {
     position: absolute !important;
     inset: 0 auto 0 0 !important;
     /* !important is load-bearing: the host ships
@@ -209,10 +214,10 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
      until: 上游提供不透明的面板填充接缝，或不再把 --dsw-specific-sidebar-fill 置空——届时本块删除
      test: tests/wallpaper-surface-fill.test.ts
   */
-  body[data-dsh-bg] [data-mobile-nav="frame"] > :first-child {
+  body[data-dsh-bg] [data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {
     background: var(--dsw-static-neutral-bluish-50, #f9fafb);
   }
-  body[data-ds-dark-theme][data-dsh-bg] [data-mobile-nav="frame"] > :first-child {
+  body[data-ds-dark-theme][data-dsh-bg] [data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {
     background: var(--dsw-static-neutral-bluish-900, #1b1b1c);
   }
 
@@ -231,7 +236,7 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
      a min(88vw, 280px) column translated -110% of its own width, i.e. -308px
      at 390px. The gesture layer never depended on this rule - it writes an
      inline transform !important - so only the CSS-driven click paths regressed. */
-  [data-mobile-nav="frame"][data-sidebar-collapsed] > :first-child {
+  [data-mobile-nav="frame"]:not([data-sidebar-drawer])[data-sidebar-collapsed] > :first-child {
     width: min(88vw, 280px) !important;
     transform: translateX(-110%) !important;
   }
@@ -245,7 +250,7 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
      overflow:hidden drawer to scrollLeft=102, and every static child (plus the
      fixed overlay) shifts 102px off-screen. With transform:none the overlay is
      viewport-anchored: it dims the full screen and the sheet sits at left:8. */
-  [data-mobile-nav="frame"]:not([data-sidebar-collapsed]) > :first-child {
+  [data-mobile-nav="frame"]:not([data-sidebar-drawer]):not([data-sidebar-collapsed]) > :first-child {
     transform: none !important;
   }
 
@@ -278,9 +283,9 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
      (0,4,1) and ends the tie - the outcome no longer depends on which sheet is
      injected later. The hash class and the label stay as fallbacks for hosts
      without that hook. */
-  html [data-mobile-nav="frame"][data-sidebar-collapsed] [data-pane="sidebar"] [data-dsh-responsive-part="sidebar-toggle"],
-  html [data-mobile-nav="frame"] [data-dsh-responsive-part="sidebar-toggle"],
-  html [data-mobile-nav="frame"] [class*="hHd-Xa_toggle"]:is([aria-label*="sidebar" i], [aria-label*="侧边栏"]),
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer])[data-sidebar-collapsed] [data-pane="sidebar"] [data-dsh-responsive-part="sidebar-toggle"],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-dsh-responsive-part="sidebar-toggle"],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [class*="hHd-Xa_toggle"]:is([aria-label*="sidebar" i], [aria-label*="侧边栏"]),
   /* The label-only fallbacks MUST stay scoped to the seats the host's own
      drawer handle can live in. Unscoped they match by aria-label substring,
      and the session row's ⋯ carries 会话“<title>”的操作 — so any session
@@ -289,10 +294,10 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
      display:none, row height unchanged, time shifted right by the 16px the
      button would have taken). Anchor them to the frame's leading seat and to
      the header's leading cell instead. */
-  html [data-mobile-nav="frame"] [data-conversation-header-leading] button[aria-label*="sidebar" i],
-  html [data-mobile-nav="frame"] [data-conversation-header-leading] button[aria-label*="侧边栏"],
-  html [data-mobile-nav="frame"] [data-shell-leading] button[aria-label*="sidebar" i],
-  html [data-mobile-nav="frame"] [data-shell-leading] button[aria-label*="侧边栏"] {
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-conversation-header-leading] button[aria-label*="sidebar" i],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-conversation-header-leading] button[aria-label*="侧边栏"],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-shell-leading] button[aria-label*="sidebar" i],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-shell-leading] button[aria-label*="侧边栏"] {
     display: none !important;
   }
 
@@ -335,7 +340,7 @@ export const LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND
      (audit S2 2026-08-27 — the old reduce block only covered the settings
      sheet and its mask). Same idiom as the animation:none blocks below. */
   @media (prefers-reduced-motion: reduce) {
-    [data-mobile-nav="frame"] > :first-child {
+    [data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {
       transition: none !important;
     }
   }
