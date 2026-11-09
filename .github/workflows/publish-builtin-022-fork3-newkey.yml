@@ -1,7 +1,7 @@
 name: Publish DSHA 0.2.2 fork.3 with repaired eight builtin plugins
 on:
   push:
-    branches: [fix/lan-settings-022-startup]
+    branches: [fix/builtin-peers-022]
     paths: [.github/workflows/publish-builtin-022-fork3-newkey.yml]
   workflow_dispatch:
 permissions:
@@ -155,7 +155,7 @@ jobs:
           notes=[
             '# DSHA Fork 0.2.2-rc.1-fork.3 — personal-use fixed APK',
             '',
-            '本版本在 fork.3 的 LAN_SETTINGS_VERSION 修复基础上，更新 4 个内置插件的 0.2.2 精确依赖声明，避免 DSH 将这些插件标记为不兼容并跳过。主运行时为 DSH 0.2.2-rc.1。',
+            '本版本在 fork.2 的 LAN_SETTINGS_VERSION 修复基础上，更新 4 个内置插件的 0.2.2 精确依赖声明，避免 DSH 将这些插件标记为不兼容并跳过。主运行时为 DSH 0.2.2-rc.1。',
             '',
             '## 下载与平台',
             '- APK: dsha-0.2.2-rc.1-fork.3-arm64.apk',
