@@ -27,6 +27,29 @@
 
 此外，注册表里的 **5 个 specialized 入口**仍需人工审查；不能把 31 个补丁匹配成功等同于 Android 功能测试成功。
 
+
+### 17 项已定位的阻塞
+
+下面是首轮 npm 安装树检查到的准确路径；“SHA 变化”只代表必须重新核实安全语义，不能反推功能一定失效。
+
+| 范围 | 具体补丁 | 原因 |
+| --- | --- | --- |
+| 工具/安全 | `tool-dispatch-validation-patch.json` | 源码 SHA 变化 |
+| 工具/安全 | `tool-messages-history-patch.json` | 源码 SHA 变化 |
+| 工具/安全 | `tool-stream-identity-patch.json` | 源码 SHA 变化 |
+| 工具/安全 | `guard-tools-patch.json` | 锚点失配 |
+| 插件/策略 | `plugin-bundle-proof-workers-patch.json` | 锚点失配 |
+| 插件/配置 | `config-editor-lock-order-patch.json` | 锚点失配 |
+| 插件/配置 | `plugin-manager-pending-patch.json`、`plugin-inventory-entries-patch.json` | 锚点失配 |
+| 插件/配置 | `retired-market-optional-patch.json`、`file-upload-resolver-lifecycle-patch.json` | 锚点失配 |
+| 会话/界面 | `composer-enter-patch.json`、`sidebar-layout-recovery-patch.json`、`session-interaction-patch.json` | 锚点失配 |
+| 会话/界面 | `tool-history-display-patch.json` | 源码 SHA 变化 |
+| 网页/缓存 | `frontend-static-cache-patch.json`、`tooltip-entry-patch.json` | 锚点失配 |
+| 网页/缓存 | `tooltip-interaction-patch.json` | 旧编译资源文件不存在 |
+
+实际新发布 JS 已出现静态资源 ETag/304 实现，且旧实验性市场包名已不在同一宿主模块中；相应补丁可以评估上游替代方案，但不得仅凭关键词存在就删除旧配方。工具执行默认拒绝、插件签名/证明校验必须保留等效保护。
+
+
 - 执行记录：https://github.com/Forever-Yf/DSHA/actions/runs/42560586087
 - CI 产物包含隔离的 npm lock 和机器可读的 JSON 报告。
 - 脚本：`tools/audit-dsh-upgrade.py`；工作流：`.github/workflows/dsh-022-audit.yml`。
@@ -46,7 +69,7 @@
       --install app/build/dsh-upgrade-candidate \
       --output app/build/dsh-upgrade-candidate/compatibility-audit.json
 
-脚本出现阻塞时以退出码 2 终止，`compatibility-audit.json` 仍会写出。CI 中审查步骤允许错误继续，仅为了确保报告能作为 artifact 上传，**不代表审核通过**。
+脚本出现阻塞时以退出码 2 终止，`compatibility-audit.json` 仍会写出。审查出现阻塞时，GitHub Actions 工作流会失败；artifact 上传步骤仍用 `if: always()` 保存报告，**不能把报告上传成功理解为兼容性通过**。
 
 ## 在更新生产代码之前必须完成
 
