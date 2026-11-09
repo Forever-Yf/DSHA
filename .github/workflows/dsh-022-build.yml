@@ -4,7 +4,7 @@ on:
     branches: [upgrade/dsh-0.2.2-rc.1]
     paths:
       - .github/workflows/dsh-022-build.yml
-      - tools/port-dsh-022.py
+      - tools/run-fork-gradle.py
       - tools/fork-022-build.py
   workflow_dispatch:
 permissions:
@@ -29,6 +29,8 @@ jobs:
         with:
           node-version: '24'
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          log-accepted-android-sdk-licenses: false
       - name: Check production source version
         run: |
           python3 - <<'PY'
@@ -60,7 +62,6 @@ jobs:
                   with z.open(unique(target)) as source,path.open('wb') as output:shutil.copyfileobj(source,output)
                   pin=baseline['inputs'].get(path.name)
                   if pin and hashlib.sha256(path.read_bytes()).hexdigest()!=pin:raise ValueError('BASELINE_ASSET_HASH: '+target)
-          # Whole source ZIP SHA above binds every unlisted original input too.
           PY
       - name: Generate real Linux arm64 main runtime and content evidence
         run: |
@@ -83,11 +84,10 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;26.3.11579264'
-          chmod +x gradlew
       - name: Assemble non-debuggable Standard release candidate
         run: |
           set -euo pipefail
-          ./gradlew :app:assembleStandardRelease -Pdsha.unsignedPackage=true --no-daemon --max-workers=2
+          python3 tools/run-fork-gradle.py :app:assembleStandardRelease -Pdsha.unsignedPackage=true --no-daemon --max-workers=2 --stacktrace 2>&1 | tee app/build/fork-022/output/android-build.log
       - name: Bind generated source and runtime receipts to candidate APK
         run: |
           set -euo pipefail
