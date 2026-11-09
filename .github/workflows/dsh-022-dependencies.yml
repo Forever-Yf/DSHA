@@ -1,0 +1,44 @@
+name: DSH 0.2.2 complete dependency graph
+on:
+  push:
+    branches: [upgrade/dsh-0.2.2-rc.1]
+    paths: [.github/workflows/dsh-022-dependencies.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Resolve all explicit Android integration dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/full-022 app/build/dependency-output
+          python3 - <<'PY'
+          import json,pathlib
+          p=json.loads(pathlib.Path('tools/dsh-runtime/package.json').read_text())
+          p['version']='0.2.2-rc.1'
+          for name in p['dependencies']:
+              if name.startswith('@deepseek-ai/dsh'): p['dependencies'][name]='0.2.2-rc.1'
+          p['dependencies']['@deepseek-ai/cordis-plugin-group']='1.1.0'
+          pathlib.Path('app/build/full-022/package.json').write_text(json.dumps(p,indent=2)+'\n')
+          PY
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix app/build/full-022 2>&1 | tee app/build/dependency-output/install.log
+          npm ci --ignore-scripts --no-audit --no-fund --prefix app/build/full-022
+          cp app/build/full-022/package*.json app/build/dependency-output/
+          tar -czf app/build/dependency-output/full-runtime.tar.gz -C app/build/full-022 .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: dsh-022-full-dependencies
+          path: app/build/dependency-output/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
