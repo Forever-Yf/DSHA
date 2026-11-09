@@ -185,6 +185,15 @@ def main():
         "needsManualReview": len(report["specializedNeedsManualReview"]),
         "report": str(output),
     }, ensure_ascii=False))
+    for row in report["patchResults"]:
+        if row["status"] not in ("applicable", "already-present"):
+            print("BLOCKED patch:", row["asset"], "module:", row["module"],
+                  "reason:", row["status"])
+    for row in report["builderRequiredFiles"]:
+        if not row["present"]:
+            print("BLOCKED builder module:", row["module"])
+    for item in report["specializedNeedsManualReview"]:
+        print("REVIEW specialized:", item)
     if report["blockerCount"]:
         raise SystemExit(2)
 
