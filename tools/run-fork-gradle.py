@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Run the repository's exact Gradle distribution despite transient CDN failures."""
+"""Run exact Gradle and real-runtime acceptance; never weaken source integrity gates."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -43,4 +44,11 @@ with zipfile.ZipFile(archive) as z:
 binary = work / ('gradle-' + version) / 'bin/gradle'
 binary.chmod(0o755)
 print('Verified Gradle ' + version + ' SHA-256: ' + expected, flush=True)
-raise SystemExit(subprocess.call([str(binary), *sys.argv[1:]], cwd=ROOT, env=os.environ.copy()))
+managed = Path(json.loads((ROOT / 'app/build/test-runtimes/current.json').read_text())['managed'])
+subprocess.run(['node', 'tools/test-dsh-022-acceptance.mjs', str(managed)], cwd=ROOT, check=True)
+subprocess.run([str(binary), *sys.argv[1:]], cwd=ROOT, check=True)
+playwright = managed / 'node_modules/playwright'
+subprocess.run(['node', str(playwright / 'cli.js'), 'install', '--with-deps', 'chromium'], cwd=ROOT, check=True)
+env = dict(os.environ, DSHA_PLAYWRIGHT=str(playwright))
+subprocess.run(['node', 'tools/smoke-dsh-runtime.mjs', str(managed), 'app/build/fork-022/output/browser', '--builtins', '--browser'], cwd=ROOT, env=env, check=True)
+print('PASS APK assembly and real mobile browser initialization; physical-device tests remain separate.', flush=True)
