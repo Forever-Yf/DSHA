@@ -1,0 +1,218 @@
+name: Publish DSHA 0.2.2 fork.3 with repaired eight builtin plugins
+on:
+  push:
+    branches: [fix/builtin-peers-022]
+    paths: [.github/workflows/publish-builtin-022-fork3-newkey.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-dsha-fork3-builtins
+  cancel-in-progress: false
+env:
+  BUILD_RUN: '42651679581'
+  BUILD_ARTIFACT: '13690407924'
+  BUILD_ARTIFACT_SHA: c87591740b53d22a781e9b8d480e2fbdfc10dc94dbd67691af359dd76f1800b8
+  BUILD_SOURCE: 30acfbe0c313ee77a757be2c1c611a85ea144f98
+  RELEASE_TAG: v0.2.2-rc.1-fork.3
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          log-accepted-android-sdk-licenses: false
+      - name: Verify successful source-bound candidate build and immutable artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/fork3-release/input app/build/fork3-release/public app/build/fork3-release/sealed
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" > app/build/fork3-release/run.json
+          python3 - <<'PY'
+          import json,os,pathlib
+          r=json.loads(pathlib.Path('app/build/fork3-release/run.json').read_text())
+          assert r['status']=='completed' and r['conclusion']=='success'
+          assert r['path']=='.github/workflows/builtin-022-build.yml'
+          assert r['head_sha']==os.environ['BUILD_SOURCE']
+          assert r['head_branch']=='fix/builtin-peers-022'
+          assert r['repository']['full_name']==os.environ['GITHUB_REPOSITORY']
+          PY
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$BUILD_ARTIFACT/zip" > app/build/fork3-release/input.zip
+          echo "$BUILD_ARTIFACT_SHA  app/build/fork3-release/input.zip" | sha256sum -c
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,shutil,zipfile,xml.etree.ElementTree as ET
+          root=pathlib.Path('app/build/fork3-release');dest=root/'input';public=root/'public'
+          with zipfile.ZipFile(root/'input.zip') as z:
+              for info in z.infolist():
+                  p=pathlib.PurePosixPath(info.filename)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert ((info.external_attr>>16)&0o170000)!=0o120000
+              z.extractall(dest)
+          output=dest/'fork-022/output'
+          assert (output/'source-commit.txt').read_text().strip()==os.environ['BUILD_SOURCE']
+          apks=list(output.glob('*unsigned.apk'));assert len(apks)==1
+          expected=(output/'SHA256SUMS').read_text().split()[0]
+          h=hashlib.sha256()
+          with apks[0].open('rb') as f:
+              for b in iter(lambda:f.read(1048576),b''):h.update(b)
+          assert h.hexdigest()==expected
+          counts={'tests':0,'failures':0,'errors':0,'skipped':0};classes=[]
+          for p in (dest/'test-results').rglob('TEST-*.xml'):
+              x=ET.parse(p).getroot();classes.append(x.get('name'))
+              for k in counts:counts[k]+=int(x.get(k,0))
+          assert counts=={'tests':74,'failures':0,'errors':0,'skipped':0},counts
+          assert 'com.deepseekharness.app.util.ManagedPatchRegistryIntegrationTest' in classes
+          assert 'com.deepseekharness.app.runtime.RuntimeToolsRegistryAndroidTest' in classes
+          browser=json.loads((output/'browser/browser-state.json').read_text())
+          assert browser['integration']=='ready' and browser['mobile'] and not browser['errors']
+          found=[]
+          for line in (output/'android-build.log').read_text().splitlines():
+              try: value=json.loads(line)
+              except ValueError: continue
+              if isinstance(value,dict) and value.get('version')=='0.2.2-rc.1' and value.get('tests')==20:
+                  found.append(value)
+          assert len(found)==1 and found[0]['status']=='PASS'
+          loaded=[json.loads(line) for line in (output/'smoke-builtins.log').read_text().splitlines() if line.strip().startswith('{')]
+          assert len(loaded)==1 and loaded[0].get('status')=='PASS'
+          assert loaded[0].get('skippedBundles')==0 and len(loaded[0]['plugins'])==8
+          for name in ('dsh-device-shell-guide','dsh-computer-use-android','dsh-auto-review','dsh-tool-vscreen'):
+              assert name in loaded[0]['plugins']
+          shutil.copyfile(output/'source.tar.gz',public/'DSHA-0.2.2-rc.1-fork.3-source.tar.gz')
+          for name in ('runtime-descriptor.json','dsh-runtime.inputs.json','smoke-core.log','smoke-builtins.log'):
+              shutil.copyfile(output/name,public/name)
+          shutil.copyfile(output/'browser/browser.png',public/'mobile-ui-smoke.png')
+          receipt={'buildRun':int(os.environ['BUILD_RUN']),'sourceCommit':os.environ['BUILD_SOURCE'],
+                   'junit':counts,'junitClasses':classes,'runtimeAcceptance':found[0],
+                   'browser':{'integration':browser['integration'],'mobile':browser['mobile'],'errors':browser['errors']},
+                   'unsignedApkSha256':expected}
+          (public/'software-tests.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          pathlib.Path('app/build/fork3-release/unsigned-apk.path').write_text(str(apks[0].resolve()))
+          print(json.dumps(receipt))
+          PY
+          git merge-base --is-ancestor "$BUILD_SOURCE" HEAD
+      - name: Install exact Android signing and ARM64 verification tools
+        run: |
+          set -euo pipefail
+          sdkmanager 'build-tools;36.0.0'
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-user
+      - name: Verify embedded ARM64 DSH 0.2.2 before signing
+        run: |
+          APK="$(cat app/build/fork3-release/unsigned-apk.path)"
+          python3 tools/verify-fork-022-apk.py --apk "$APK" --sdk "$ANDROID_HOME" --work app/build/fork3-release/unsigned-check
+      - name: Sign with a new personal key and seal a recoverable backup to the owner's public key
+        run: |
+          set -euo pipefail
+          APK="$(cat app/build/fork3-release/unsigned-apk.path)"
+          python3 tools/sign-fork-022-apk.py --apk "$APK" --sdk "$ANDROID_HOME" --out app/build/fork3-release/public --sealed-out app/build/fork3-release/sealed --recipient ci/fork2-signing-backup-recipient.pem --identity app/build/fork3-release/fork3-release-identity.json
+          python3 - <<'PY'
+          import json,pathlib
+          new=json.loads(pathlib.Path('app/build/fork3-release/fork3-release-identity.json').read_text())
+          old=json.loads(pathlib.Path('ci/fork-release-identity.json').read_text())
+          assert new['applicationId']=='io.github.foreveryf.dsha'
+          assert new['certificateSha256']!=old['certificateSha256']
+          assert new['certificateSha256']!='65c4829f5fd9a9242b239d38badf53788f968b4c7b41f531ec2ed1155effd5c8'
+          assert new['requiresExistingPrivateKeyForUpdates'] is True
+          print(json.dumps({'newCertificateSha256':new['certificateSha256'],'fork1CertificateRetained':old['certificateSha256']}))
+          PY
+      - name: Verify final signed APK, original runtime version and new signing identity
+        run: |
+          set -euo pipefail
+          python3 tools/verify-fork-022-apk.py --apk app/build/fork3-release/public/dsha-0.2.2-rc.1-fork.3-arm64.apk --sdk "$ANDROID_HOME" --work app/build/fork3-release/signed-check
+          cp app/build/fork3-release/signed-check/apk-acceptance.json app/build/fork3-release/public/
+          cp app/build/fork3-release/fork3-release-identity.json app/build/fork3-release/public/
+          cp app/build/fork3-release/sealed/signing-key-backup.sealed.json app/build/fork3-release/public/
+          cp app/build/fork3-release/public/fork-signing-certificate.der app/build/fork3-release/public/fork3-signing-certificate.der
+          mv app/build/fork3-release/public/signature-verification.txt app/build/fork3-release/public/fork3-signature-verification.txt
+          mv app/build/fork3-release/public/dsha-0.2.2-rc.1-fork.3-arm64.apk.sha256 app/build/fork3-release/public/SHA256SUMS.txt
+      - name: Generate factual release notes and verify the encrypted recovery asset
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('app/build/fork3-release/public')
+          a=json.loads((p/'apk-acceptance.json').read_text())
+          s=json.loads((p/'software-tests.json').read_text())
+          i=json.loads((p/'fork3-release-identity.json').read_text())
+          old=json.loads(pathlib.Path('ci/fork-release-identity.json').read_text())
+          assert a['status']=='PASS' and a['dshVersion']=='0.2.2-rc.1'
+          assert a['versionCode']==193 and a['applicationId']=='io.github.foreveryf.dsha'
+          assert a['qemuNodeAndCli'] and a['abi']=='arm64-v8a'
+          assert i['certificateSha256']!=old['certificateSha256']
+          assert i['certificateSha256']!='65c4829f5fd9a9242b239d38badf53788f968b4c7b41f531ec2ed1155effd5c8'
+          backup=json.loads((p/'signing-key-backup.sealed.json').read_text())
+          assert backup['certificateSha256']==i['certificateSha256']
+          assert backup['algorithm']=='RSA-OAEP-SHA256+A256CBC+HMAC-SHA256'
+          notes=[
+            '# DSHA Fork 0.2.2-rc.1-fork.3 — personal-use fixed APK',
+            '',
+            '本版本在 fork.2 的 LAN_SETTINGS_VERSION 修复基础上，更新 4 个内置插件的 0.2.2 精确依赖声明，避免 DSH 将这些插件标记为不兼容并跳过。主运行时为 DSH 0.2.2-rc.1。',
+            '',
+            '## 下载与平台',
+            '- APK: dsha-0.2.2-rc.1-fork.3-arm64.apk',
+            '- Android ARM64 (arm64-v8a), minimum API 30 / Android 11.',
+            '- Application ID: io.github.foreveryf.dsha; versionCode 193.',
+            '- APK SHA-256: '+a['apkSha256'],
+            '- Runtime SHA-256: '+a['runtimeSha256'],
+            '',
+            '## 签名与覆盖安装',
+            '本版本使用新生成的个人 Fork 签名，证书 SHA-256: '+i['certificateSha256']+'.',
+            '它与 fork.2 的旧证书 65c4829f5fd9a9242b239d38badf53788f968b4c7b41f531ec2ed1155effd5c8 不同。Android 默认会拒绝不同签名的同包名覆盖安装；Root 本身不会自动绕过 PackageManager 签名校验。设备的签名校验绕过未经过本项目验证。',
+            '请优先备份数据；如果必须卸载 fork.2 再安装 fork.3，卸载可能删除应用私有数据、Ubuntu rootfs、会话和插件配置。没有可验证备份前不要卸载或清除数据。',
+            '',
+            '## 软件验收',
+            '- 74 项 Android Java/Robolectric 单测，失败、错误、跳过均为 0；包含 11 项 RuntimeToolsRegistryAndroidTest，覆盖 LAN 设置准备、SHA 校验、版本拒绝、重复执行和字节保持。',
+            '- 20 项 native/PTC 管线与 JSON 存储测试；工具为内存夹具，不执行真实设备命令。',
+            '- 实际 DSH 启动检查全部 8 个内置插件，skippedBundles=0；认证、拒绝路径及手机尺寸浏览器初始化通过。',
+            '- APK 内 ARM64 Node 与 DSH CLI 通过 QEMU 执行，返回 0.2.2-rc.1。',
+            '- APK 包名、versionCode、ABI、不可调试标记、运行时摘要及 v1/v2/v3 签名已验证。',
+            '',
+            '限制：Linux x64 宿主验证了全部 8 个插件未因版本不匹配被跳过；尚未在用户真机 Android/proot/OEM 上验证设备操作、屏幕工具及签名切换。',
+            '',
+            '## 新签名备份',
+            '附件 signing-key-backup.sealed.json 是加密备份，只能由单独交付给仓库所有者的 recipient-private.pem 解密。请离线保存私钥。解密后用 tools/restore-fork-signing-backup.py 恢复 PKCS#12，并将 DSHA_FORK_KEYSTORE_BASE64 和 DSHA_FORK_KEYSTORE_PASSWORD 配置为 GitHub Actions Secrets。今后发布必须使用此证书。',
+            '',
+            '## 来源',
+            '- Build source commit: '+s['sourceCommit'],
+            '- Build and tests: https://github.com/Forever-Yf/DSHA/actions/runs/'+str(s['buildRun']),
+            '- 附带源代码归档、运行时描述符、测试报告、签名证书、验证结果和加密密钥备份。'
+          ]
+          (p/'RELEASE_NOTES.md').write_text('\n'.join(notes)+'\n',encoding='utf-8')
+          print(json.dumps({'apkSha256':a['apkSha256'],'certificateSha256':i['certificateSha256'],'tests':s['junit']['tests'],'status':a['status']}))
+          PY
+      - name: Publish signed personal-use fork.3 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite."
+            exit 2
+          fi
+          gh release create "$RELEASE_TAG" app/build/fork3-release/public/dsha-0.2.2-rc.1-fork.3-arm64.apk app/build/fork3-release/public/SHA256SUMS.txt app/build/fork3-release/public/apk-acceptance.json app/build/fork3-release/public/software-tests.json app/build/fork3-release/public/fork3-release-identity.json app/build/fork3-release/public/fork3-signing-certificate.der app/build/fork3-release/public/fork3-signature-verification.txt app/build/fork3-release/public/signing-key-backup.sealed.json app/build/fork3-release/public/runtime-descriptor.json app/build/fork3-release/public/dsh-runtime.inputs.json app/build/fork3-release/public/smoke-core.log app/build/fork3-release/public/smoke-builtins.log app/build/fork3-release/public/mobile-ui-smoke.png app/build/fork3-release/public/DSHA-0.2.2-rc.1-fork.3-source.tar.gz app/build/fork3-release/public/RELEASE_NOTES.md --repo "$GITHUB_REPOSITORY" --target "$BUILD_SOURCE" --prerelease --title 'DSHA 0.2.2-rc.1-fork.3 · 恢复 4 个内置插件 · 新签名' --notes-file app/build/fork3-release/public/RELEASE_NOTES.md
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '{url: .url, files: [.assets[].name]}'
+      - name: Retain encrypted signing recovery separately
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fork3-encrypted-signing-backup
+          path: app/build/fork3-release/public/signing-key-backup.sealed.json
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Retain public verification receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fork3-public-verification-receipts
+          path: app/build/fork3-release/public/
+          if-no-files-found: warn
+          retention-days: 30
