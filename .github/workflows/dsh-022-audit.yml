@@ -39,7 +39,6 @@ jobs:
             --os=linux --cpu=arm64 --libc=glibc --prefix app/build/dsh-upgrade-candidate
           node app/build/dsh-upgrade-candidate/node_modules/@deepseek-ai/dsh/lib/bin.js --version
       - name: Audit exact-byte patch and builder entrypoint compatibility
-        continue-on-error: true
         run: |
           python3 tools/audit-dsh-upgrade.py \
             --install app/build/dsh-upgrade-candidate \
