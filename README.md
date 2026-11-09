@@ -1,6 +1,6 @@
-> **0.2.2 修复版已发布：** [下载 fork.2 ARM64 APK](https://github.com/Forever-Yf/DSHA/releases/tag/v0.2.2-rc.1-fork.2)。它修复了 `fork.1` 的 `LAN_SETTINGS_VERSION` 启动维护错误。注意：fork.2 使用新签名，与 fork.1 证书不同，Android 默认不允许直接覆盖；Root 签名绕过未验证。安装前备份数据，卸载旧版可能删除应用私有数据。`fork.1` 故障说明与修复过程见 [PR #2](https://github.com/Forever-Yf/DSHA/pull/2)。
+> **最新个人预发布：DSHA 0.2.2-rc.1-fork.3。** [下载修复版 ARM64 APK](https://github.com/Forever-Yf/DSHA/releases/tag/v0.2.2-rc.1-fork.3) · [源码修复 PR #3](https://github.com/Forever-Yf/DSHA/pull/3)。修复 fork.2 中 4 个内置插件因旧版 peerDependencies 被 DSH 跳过的问题；实际 Linux 启动测试 8 个内置插件全部通过，skippedBundles=0。**真实 Android 设备操作尚未验收。**
 
-> **本 Fork 已发布真实 DSH 0.2.2-rc.1 APK。** [下载与验证说明](FORK.md) · [Release](https://github.com/Forever-Yf/DSHA/releases/tag/v0.2.2-rc.1-fork.1)。独立包名/签名，可与原版共存；以下上游说明按历史记录阅读。
+> **安装前备份数据：** fork.3 采用新个人签名，与 fork.2 证书不同。Android 默认拒绝跨签名覆盖，Root 签名绕过未验证；卸载旧版可能删除应用私有数据、会话、插件和 Ubuntu 运行环境。此前 fork.1/fork.2 为历史预发布记录；以下上游内容为原始说明。
 
 # DSHA
 
