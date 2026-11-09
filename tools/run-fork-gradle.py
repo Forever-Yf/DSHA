@@ -46,6 +46,8 @@ binary.chmod(0o755)
 print('Verified Gradle ' + version + ' SHA-256: ' + expected, flush=True)
 managed = Path(json.loads((ROOT / 'app/build/test-runtimes/current.json').read_text())['managed'])
 subprocess.run(['node', 'tools/test-dsh-022-acceptance.mjs', str(managed)], cwd=ROOT, check=True)
+subprocess.run(['node', 'tools/test-storage-json-proroot-dirent.mjs', str(managed / 'node_modules/@deepseek-ai/dsh-storage-json/lib/index.js')], cwd=ROOT, check=True)
+subprocess.run([sys.executable, 'tools/prepare-linux-aapt2-pin.py'], cwd=ROOT, check=True)
 subprocess.run([str(binary), *sys.argv[1:]], cwd=ROOT, check=True)
 playwright = managed / 'node_modules/playwright'
 subprocess.run(['node', str(playwright / 'cli.js'), 'install', '--with-deps', 'chromium'], cwd=ROOT, check=True)
