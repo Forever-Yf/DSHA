@@ -5,8 +5,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
+import uuid
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,13 +46,28 @@ with zipfile.ZipFile(archive) as z:
 binary = work / ('gradle-' + version) / 'bin/gradle'
 binary.chmod(0o755)
 print('Verified Gradle ' + version + ' SHA-256: ' + expected, flush=True)
+# Earlier smoke runs install builtins in their runtime. Certify a fresh managed
+# fixture from the immutable npm-ci raw tree, not from that modified smoke tree.
+subprocess.run([sys.executable, 'tools/prepare-test-runtime.py'], cwd=ROOT, check=True)
 managed = Path(json.loads((ROOT / 'app/build/test-runtimes/current.json').read_text())['managed'])
 subprocess.run(['node', 'tools/test-dsh-022-acceptance.mjs', str(managed)], cwd=ROOT, check=True)
 subprocess.run(['node', 'tools/test-storage-json-proroot-dirent.mjs', str(managed / 'node_modules/@deepseek-ai/dsh-storage-json/lib/index.js')], cwd=ROOT, check=True)
 subprocess.run([sys.executable, 'tools/prepare-linux-aapt2-pin.py'], cwd=ROOT, check=True)
+# Exercise the actual Java patch-chain engine against every locked npm module,
+# including the second idempotent application that happens during phone startup.
+tests = ['ManagedPatchRegistryIntegrationTest', 'ManagedPatchChainTest', 'ExactTextPatchTest', 'NativeConsentPolicyTest', 'DeviceShellPolicyTest', 'ShellQuoteTest', 'BackupScopeTest', 'CredentialPathsTest', 'BridgeCredentialAuthTest', 'SelfPackageIdentityTest', 'RuntimeDescriptorTest', 'DataFormatEvidenceTest']
+command = [str(binary), ':app:testStandardDebugUnitTest']
+for name in tests:
+    command += ['--tests', '*.' + name]
+command += ['-Pdsha.unsignedPackage=true', '--no-daemon', '--max-workers=2', '--stacktrace']
+subprocess.run(command, cwd=ROOT, check=True)
 subprocess.run([str(binary), *sys.argv[1:]], cwd=ROOT, check=True)
-playwright = managed / 'node_modules/playwright'
+# Browser smoke may write builtin plugin packages, so it must not mutate the
+# verified managed fixture whose member-by-member proof is used by other tests.
+smoke = ROOT / 'app/build/fork-022' / ('browser-runtime-' + uuid.uuid4().hex[:12])
+shutil.copytree(managed, smoke, symlinks=True)
+playwright = smoke / 'node_modules/playwright'
 subprocess.run(['node', str(playwright / 'cli.js'), 'install', '--with-deps', 'chromium'], cwd=ROOT, check=True)
 env = dict(os.environ, DSHA_PLAYWRIGHT=str(playwright))
-subprocess.run(['node', 'tools/smoke-dsh-runtime.mjs', str(managed), 'app/build/fork-022/output/browser', '--builtins', '--browser'], cwd=ROOT, env=env, check=True)
+subprocess.run(['node', 'tools/smoke-dsh-runtime.mjs', str(smoke), 'app/build/fork-022/output/browser', '--builtins', '--browser'], cwd=ROOT, env=env, check=True)
 print('PASS APK assembly and real mobile browser initialization; physical-device tests remain separate.', flush=True)
