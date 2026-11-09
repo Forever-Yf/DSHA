@@ -1027,6 +1027,9 @@ function commitFollowClose(ctx: ClientContext): void {
  * drawer is already closed (that call would OPEN it) or the user asked for
  * reduced motion, where the spec degrades the animation instead of adding one. */
 export function closeDrawerAnimated(ctx: ClientContext): boolean {
+  // In DSH 0.2.2, the host draws its own sidebar and backdrop; animating the
+  // first DOM child would animate the native mask instead of the sidebar.
+  if (getFrame()?.hasAttribute('data-sidebar-drawer')) return false
   if (!drawerOpen()) return false
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
   const drawer = findDrawer()
@@ -1441,6 +1444,12 @@ export function installSidebarSwipe(ctx: ClientContext, filesToggle: () => boole
       // instead of eating it at the document-capture click handler.
       consumedEl = null
       clearStrokeLocked() // belt-and-suspenders: a lost stroke must not leak its lock into this epoch
+      // Native 0.2.2 sidebar handles its own drawer gestures. Legacy code
+      // assumes firstElementChild is the sidebar; that is the mask now.
+      if (getFrame()?.hasAttribute('data-sidebar-drawer')) {
+        if (trackingPointer !== 0) abortStroke(ctx)
+        return
+      }
       if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return
       // A second finger means the browser owns this interaction (pinch zoom),
       // and a two-finger drag is never a drawer swipe. Merely ignoring the
