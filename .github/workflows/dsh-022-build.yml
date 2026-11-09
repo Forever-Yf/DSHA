@@ -5,7 +5,6 @@ on:
     paths:
       - .github/workflows/dsh-022-build.yml
       - tools/port-dsh-022.py
-      - tools/test-dsh-022-acceptance.mjs
       - tools/fork-022-build.py
   workflow_dispatch:
 permissions:
@@ -29,27 +28,13 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
-      - name: Restore pinned npm migration input
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+      - name: Check production source version
         run: |
-          set -euo pipefail
-          mkdir -p app/build/port/full app/build/port/input
-          gh api repos/Forever-Yf/DSHA/actions/artifacts/13649944282/zip > app/build/port/input.zip
-          echo 'f95f06a426bdcd8a6e41fb4399684e78e08d1c001876966eeb8b974d0394e9d8  app/build/port/input.zip' | sha256sum -c
-          unzip -q app/build/port/input.zip -d app/build/port/input
-          tar -xzf app/build/port/input/full-runtime.tar.gz -C app/build/port/full
-          python3 tools/port-dsh-022.py app/build/port/full
-      - name: Commit actual migrated source and dependency lock
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app tools
-          if ! git diff --cached --quiet; then
-            git commit -m 'feat: port DSHA runtime and native identity to DSH 0.2.2-rc.1'
-            git push origin HEAD:upgrade/dsh-0.2.2-rc.1
-          fi
+          python3 - <<'PY'
+          import json,pathlib
+          assert json.loads(pathlib.Path('tools/dsh-runtime/package.json').read_text())['version']=='0.2.2-rc.1'
+          PY
       - name: Restore immutable upstream offline build inputs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,17 +45,22 @@ jobs:
           export SOURCE_ZIP="$RUNNER_TEMP/DSHA-0.2.1-rc.2-20261022.2100-source.zip"
           echo "ef134fe8713bfa4d6cf3bdea883be1591246d4b78ace16bd924f6d739188425a  $SOURCE_ZIP" | sha256sum -c
           python3 - <<'PY'
-          import importlib.util,os,pathlib,shutil,sys,zipfile
+          import hashlib,importlib.util,json,os,pathlib,shutil,sys,zipfile
           sys.path.insert(0,'tools')
           spec=importlib.util.spec_from_file_location('assets','tools/ci-assets.py')
           mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
           with zipfile.ZipFile(os.environ['SOURCE_ZIP']) as z:
-              for target in sorted(mod.allowed()):
+              def unique(target):
                   matches=[i for i in z.infolist() if i.filename==target or i.filename.endswith('/'+target)]
-                  if len(matches)!=1: raise ValueError('SOURCE_ASSET_NOT_UNIQUE: '+target+': '+str(len(matches)))
+                  if len(matches)!=1: raise ValueError('SOURCE_ASSET_NOT_UNIQUE: '+target)
+                  return matches[0]
+              baseline=json.loads(z.read(unique('app/src/main/assets/runtime-descriptor.json')))
+              for target in sorted(mod.allowed()):
                   path=pathlib.Path(target);path.parent.mkdir(parents=True,exist_ok=True)
-                  with z.open(matches[0]) as source,path.open('wb') as output:shutil.copyfileobj(source,output)
-          mod.verify_sources()
+                  with z.open(unique(target)) as source,path.open('wb') as output:shutil.copyfileobj(source,output)
+                  pin=baseline['inputs'].get(path.name)
+                  if pin and hashlib.sha256(path.read_bytes()).hexdigest()!=pin:raise ValueError('BASELINE_ASSET_HASH: '+target)
+          # Whole source ZIP SHA above binds every unlisted original input too.
           PY
       - name: Generate real Linux arm64 main runtime and content evidence
         run: |
@@ -84,10 +74,11 @@ jobs:
       - name: Create verified host fixtures and run actual 0.2.2 startup checks
         run: |
           set -euo pipefail
+          mkdir -p app/build/fork-022/output
           python3 tools/prepare-test-runtime.py
           managed=$(python3 -c 'import json; print(json.load(open("app/build/test-runtimes/current.json"))["managed"])')
-          node tools/smoke-dsh-runtime.mjs "$managed" app/build/fork-022/smoke-core
-          node tools/smoke-dsh-runtime.mjs "$managed" app/build/fork-022/smoke-builtins --builtins
+          node tools/smoke-dsh-runtime.mjs "$managed" app/build/fork-022/smoke-core | tee app/build/fork-022/output/smoke-core.log
+          node tools/smoke-dsh-runtime.mjs "$managed" app/build/fork-022/smoke-builtins --builtins | tee app/build/fork-022/output/smoke-builtins.log
       - name: Install exact Android build toolchain
         run: |
           set -euo pipefail
@@ -100,7 +91,9 @@ jobs:
       - name: Bind generated source and runtime receipts to candidate APK
         run: |
           set -euo pipefail
-          git add app/src/main/assets/dsh-runtime.inputs.json app/src/main/assets/managed-package-proofs.json app/src/main/assets/runtime-descriptor.json app/src/main/assets/licenses tools
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
           if ! git diff --cached --quiet; then
             git commit -m 'build: bind 0.2.2 runtime bytes and notices to fork candidate'
             git push origin HEAD:upgrade/dsh-0.2.2-rc.1
@@ -109,7 +102,16 @@ jobs:
           git rev-parse HEAD > app/build/fork-022/output/source-commit.txt
           cp app/build/outputs/apk/standard/release/*unsigned.apk app/build/fork-022/output/
           cp app/src/main/assets/dsh-runtime.inputs.json app/src/main/assets/runtime-descriptor.json app/build/fork-022/output/
+          git archive --format=tar.gz HEAD > app/build/fork-022/output/source.tar.gz
           sha256sum app/build/fork-022/output/*.apk > app/build/fork-022/output/SHA256SUMS
+      - name: Preserve generated evidence even on build failure
+        if: always()
+        run: |
+          mkdir -p app/build/fork-022/output
+          for f in dsh-runtime.inputs.json runtime-descriptor.json managed-package-proofs.json; do
+            test ! -f "app/src/main/assets/$f" || cp "app/src/main/assets/$f" app/build/fork-022/output/
+          done
+          git diff > app/build/fork-022/output/generated-source.patch
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
