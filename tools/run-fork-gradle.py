@@ -69,5 +69,5 @@ shutil.copytree(managed, smoke, symlinks=True)
 playwright = smoke / 'node_modules/playwright'
 subprocess.run(['node', str(playwright / 'cli.js'), 'install', '--with-deps', 'chromium'], cwd=ROOT, check=True)
 env = dict(os.environ, DSHA_PLAYWRIGHT=str(playwright))
-subprocess.run(['node', 'tools/smoke-dsh-runtime.mjs', str(smoke), 'app/build/fork-022/output/browser', '--builtins', '--browser'], cwd=ROOT, env=env, check=True)
+subprocess.run(['node', 'tools/smoke-dsh-runtime.mjs', str(smoke), 'app/build/fork-022/output/browser', '--builtins', '--browser', '--native-drawer-check'], cwd=ROOT, env=env, check=True)
 print('PASS APK assembly and real mobile browser initialization; physical-device tests remain separate.', flush=True)
