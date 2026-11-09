@@ -124,6 +124,23 @@ export function createOverlayTask(
       }
       const frame = getFrame()
       if (frame === null) return
+      // DSH 0.2.2 owns a native drawer with a sidebar mask, opener seat and
+      // stacking order. Our old mask was z1250 (over the host's z71 sidebar),
+      // which painted a grey blank panel even after the grid was repaired.
+      // Never create a competing FAB/backdrop for the host-owned drawer.
+      if (frame.hasAttribute('data-sidebar-drawer')) {
+        if (backdropRemoveTimer !== null) {
+          window.clearTimeout(backdropRemoveTimer)
+          backdropRemoveTimer = null
+        }
+        backdrop?.remove()
+        backdrop = null
+        fab?.remove()
+        fab = null
+        faded = false
+        fadeHook = null
+        return
+      }
       if (drawerOpen()) {
         if (backdrop === null) {
           backdrop = document.createElement('div')
