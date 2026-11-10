@@ -1,5 +1,8 @@
 name: Publish DSHA 0.2.2 fork.4 with verified nonblank native mobile frame
 on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-mobile-022-fork4-newkey.yml]
   workflow_dispatch:
 permissions:
   contents: write
@@ -20,7 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: 3c7fe7e889e1633ee835609dbe70891998b072c0
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
           distribution: temurin
