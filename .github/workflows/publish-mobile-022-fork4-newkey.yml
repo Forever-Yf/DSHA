@@ -1,8 +1,5 @@
 name: Publish DSHA 0.2.2 fork.4 with verified nonblank native mobile frame
 on:
-  push:
-    branches: [fix/022-mobile-blank-frame]
-    paths: [.github/workflows/publish-mobile-022-fork4-newkey.yml]
   workflow_dispatch:
 permissions:
   contents: write
