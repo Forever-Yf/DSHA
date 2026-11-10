@@ -24,7 +24,7 @@ args.work.mkdir(parents=True,exist_ok=True)
 tools=args.sdk/'build-tools/36.0.0'
 badging=subprocess.check_output([str(tools/'aapt'),'dump','badging',str(args.apk)],text=True)
 assert "name='io.github.foreveryf.dsha'" in badging
-assert "versionCode='191'" in badging and "versionName='0.2.2-rc.1-fork.1-dsh0.2.2-rc.1'" in badging
+assert "versionCode='194'" in badging and "versionName='0.2.2-rc.1-fork.4-dsh0.2.2-rc.1'" in badging
 assert "sdkVersion:'30'" in badging and "native-code: 'arm64-v8a'" in badging
 assert 'application-debuggable' not in badging
 manifest=subprocess.check_output([str(tools/'aapt'),'dump','xmltree',str(args.apk),'AndroidManifest.xml'],text=True)
@@ -136,6 +136,6 @@ major,minor=map(int,node_version.lstrip('v').split('.')[:2])
 assert major>24 or (major==24 and minor>=9),node_version
 core_version=subprocess.check_output(command+[str(runtime/main/'lib/bin.js'),'--version'],text=True,timeout=120).strip()
 assert core_version=='0.2.2-rc.1',core_version
-result={'schema':1,'status':'PASS','applicationId':'io.github.foreveryf.dsha','versionCode':191,'dshVersion':core_version,'guestNode':node_version,'abi':'arm64-v8a','minSdk':30,'debuggable':False,'runtimeSha256':runtime_sha,'apkSha256':digest_file(args.apk),'apkBytes':args.apk.stat().st_size,'runtimeId':descriptor['runtimeId'],'activePatches':49,'qemuNodeAndCli':True,'physicalDeviceTested':False,'modelApiTested':False}
+result={'schema':1,'status':'PASS','applicationId':'io.github.foreveryf.dsha','versionCode':194,'dshVersion':core_version,'guestNode':node_version,'abi':'arm64-v8a','minSdk':30,'debuggable':False,'runtimeSha256':runtime_sha,'apkSha256':digest_file(args.apk),'apkBytes':args.apk.stat().st_size,'runtimeId':descriptor['runtimeId'],'activePatches':49,'qemuNodeAndCli':True,'physicalDeviceTested':False,'modelApiTested':False}
 (args.work/'apk-acceptance.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result))

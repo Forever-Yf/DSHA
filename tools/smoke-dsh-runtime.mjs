@@ -64,6 +64,13 @@ try {
     catch (error) { if (attempt === 14) throw error; await new Promise(done => setTimeout(done, 400)); }
   }
   if (exchange.status !== 303 || !['/', './'].includes(exchange.headers.get('location'))) throw new Error('启动凭据未获得 303 根路径跳转');
+  // Do not mistake a working Web login for successful startup of the builtins.
+  // DSH 0.2.2 skips bundles with exact 0.2.1 peer pins while still serving HTTP 200.
+  // Check the actual host stderr/stdout, not merely the declared profile list.
+  if (plugins.length) {
+    const skipped = [...log.matchAll(/dsh:\s*skipping profile bundle\s+"([^"]+)"/g)].map(match => match[1]);
+    if (skipped.length) throw new Error('DSHA_BUILTIN_BUNDLE_SKIPPED: ' + [...new Set(skipped)].join(', '));
+  }
   const cookie = exchange.headers.get('set-cookie')?.split(';')[0];
   if (!cookie?.startsWith('dsh-auth-')) throw new Error('官方 Cookie 缺失');
   const base = `http://127.0.0.1:${port}/`;
@@ -88,6 +95,43 @@ try {
       if (!Number.isFinite(settleMs) || settleMs < 0 || settleMs > 300000)
         throw new Error('DSHA_BROWSER_SETTLE_MS 必须在 0 到 300000 毫秒之间');
       await page.waitForTimeout(settleMs);
+      if (process.argv.includes('--native-drawer-check')) {
+        // DSH 0.2.2 native AppFrame prepends a drawer mask and places the main
+        // pane in CSS GRID COLUMN 2. A 3.2.1 legacy mobile CSS override set
+        // that column to zero while the old z1250 backdrop concealed the
+        // real sidebar: HTTP/UI plugin smoke was falsely green on a white page.
+        const layout = await page.evaluate(() => {
+          const frame = document.querySelector('[data-mobile-nav="frame"]');
+          const native = frame?.hasAttribute('data-sidebar-drawer') === true;
+          const children = frame ? Array.from(frame.children) : [];
+          const center = children.find(el => getComputedStyle(el).gridColumnStart === '2')
+            || frame?.querySelector(':scope > [class*="centerCol"]');
+          const rect = center?.getBoundingClientRect();
+          const frameRect = frame?.getBoundingClientRect();
+          const mask = frame?.querySelector(':scope > [data-sidebar-mask]');
+          return {
+            native, frameWidth: frameRect?.width ?? 0, centerWidth: rect?.width ?? 0,
+            centerLeft: rect?.left ?? -1, centerRight: rect?.right ?? -1,
+            gridTracks: frame ? getComputedStyle(frame).gridTemplateColumns : null,
+            maskPresent: mask instanceof HTMLElement,
+            nativeSidebarPresent: mask?.nextElementSibling instanceof HTMLElement,
+            legacyBackdropCount: document.querySelectorAll('[data-mobile-nav="backdrop"]').length,
+            legacyFabCount: document.querySelectorAll('[data-mobile-nav="fab"]').length,
+            leadingSeatPresent: frame?.querySelector('[data-shell-leading]') !== null,
+            visibleText: document.body.innerText.slice(0, 240),
+          };
+        });
+        writeFileSync(resolve(home, 'native-drawer-geometry.json'), JSON.stringify(layout, null, 2));
+        if (!layout.native || !layout.maskPresent || !layout.nativeSidebarPresent
+          || layout.centerWidth < layout.frameWidth * .72
+          || layout.centerLeft < -1 || layout.centerRight > layout.frameWidth + 1
+          || layout.legacyBackdropCount !== 0 || layout.legacyFabCount !== 0
+          || !layout.leadingSeatPresent || !layout.visibleText.trim()) {
+          throw new Error('DSHA_MOBILE_CENTER_COLLAPSED_OR_NATIVE_DRAWER_COVERED: '
+            + JSON.stringify(layout));
+        }
+        console.log(JSON.stringify({ mobileNativeDrawer: 'PASS', ...layout }));
+      }
       if (process.argv.includes('--workspace') || process.argv.includes('--composer') || process.argv.includes('--header-popover')) {
         const notice = page.getByRole('button', { name: '继续', exact: true });
         if (await notice.count() && await notice.isVisible()) await notice.click();
@@ -224,7 +268,7 @@ try {
     } finally { await browser.close(); }
   }
   console.log(JSON.stringify({ status: 'PASS', auth: '303 + Cookie + HTTP 200', unauthenticated: 401,
-    invalidToken: 401, htmlBytes: Buffer.byteLength(html), plugins, platform: process.platform, arch: process.arch }));
+    invalidToken: 401, htmlBytes: Buffer.byteLength(html), plugins, skippedBundles: 0, platform: process.platform, arch: process.arch }));
   if (process.argv.includes('--hold')) {
     writeFileSync(resolve(home,'connection.json'),JSON.stringify({authUrl,base,port}),{mode:0o600});
     const until=Date.now()+300000;

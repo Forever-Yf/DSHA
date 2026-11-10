@@ -1,0 +1,54 @@
+name: Bind DSH 0.2.2 builtins to signed runtime descriptor
+on:
+  push:
+    branches: [fix/builtin-peers-022]
+    paths: [.github/workflows/builtin-022-descriptor.yml]
+permissions:
+  contents: write
+jobs:
+  descriptor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Update only verified builtin metadata identities, retaining the locked runtime archive
+        run: |
+          set -euo pipefail
+          python3 tools/test-dsh-022-builtin-peers.py
+          python3 - <<'PY'
+          import hashlib,importlib.util,json,pathlib,sys
+          root=pathlib.Path('.');assets=root/'app/src/main/assets'
+          target=assets/'runtime-descriptor.json'
+          d=json.loads(target.read_text(encoding='utf-8'))
+          assert d['version']==1 and d['dshVersion']=='0.2.2-rc.1'
+          assert d['runtimeId']=='a3cb465ce6c144e3acd8c51282010e035beca1259a97be0c8ae67039c56dbdcd'
+          names=('dsh-device-shell-guide','dsh-computer-use-android','dsh-auto-review','dsh-tool-vscreen')
+          for name in names:
+              key='builtin-plugins/'+name+'/package.json'
+              file=assets/key
+              actual=hashlib.sha256(file.read_bytes()).hexdigest()
+              if d['inputs'][key]==actual:raise ValueError('BUILTIN_INPUT_UNCHANGED: '+name)
+              d['inputs'][key]=actual
+          fields=('baseVersion','dshVersion','launcherContract','launcherInputs','bridgeProtocol','dataRead','dataWrite','inputs')
+          d['runtimeId']=hashlib.sha256(json.dumps({k:d[k] for k in fields},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+          target.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          sys.path.insert(0,'tools')
+          spec=importlib.util.spec_from_file_location('source_verify','tools/verify-runtime-descriptor-source.py')
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          report=mod.verify(root)
+          print(json.dumps({'status':'PASS','runtimeId':d['runtimeId'],'changedBuiltinManifests':names,**report}))
+          PY
+      - name: Commit verified descriptor without modifying independent DSH bytes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/assets/runtime-descriptor.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(runtime): bind DSH 0.2.2 builtin peer metadata to runtime identity'
+            git fetch origin fix/builtin-peers-022
+            git rebase origin/fix/builtin-peers-022
+            git push origin HEAD:fix/builtin-peers-022
+          fi

@@ -105,6 +105,52 @@ export function applyMobileClientPatches(bytes) {
 `;
   replace('  /* ---------- sidebar panel enter / exit (see effects/panel-exit.ts) ----------',
     css + '  /* ---------- sidebar panel enter / exit (see effects/panel-exit.ts) ----------');
+
+  // DSH 0.2.2 ships a native mobile sidebar and places the main UI in GRID
+  // COLUMN 2. The pinned upstream dsh-web-mobile 3.2.1 client assumes its
+  // first frame child is the sidebar and overrides columns to 1fr 0 0.
+  // Result on Android: a white/grey screen with a floating opener and no UI.
+  // Patch only these verified, exact upstream compiler anchors, never silently
+  // bypass our source digest or relax host-side permissions.
+  const replaceCount = (before, after, expected) => {
+    const count = source.split(before).length - 1;
+    if (count !== expected) throw new Error('移动 0.2.2 布局补丁锚点漂移: ' + before.slice(0, 90) + ' [' + count + '/' + expected + ']');
+    source = source.split(before).join(after);
+  };
+  replace('    grid-template-columns: minmax(0, 1fr) 0 0 !important;\n    padding-top:',
+    '    /* DSHA_NATIVE_DRAWER_022: keep native centre grid column 2 non-zero. */\n    padding-top:');
+  replace('  /* The sidebar column (first grid child) becomes a left drawer.',
+    '  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) {\n    grid-template-columns: minmax(0, 1fr) 0 0 !important;\n  }\n\n  /* The sidebar column (first grid child) becomes a left drawer.');
+  replaceCount('[data-mobile-nav="frame"] > :first-child {',
+    '[data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {', 4);
+  replace('[data-mobile-nav="frame"][data-sidebar-collapsed] > :first-child {',
+    '[data-mobile-nav="frame"]:not([data-sidebar-drawer])[data-sidebar-collapsed] > :first-child {');
+  replace('[data-mobile-nav="frame"]:not([data-sidebar-collapsed]) > :first-child {',
+    '[data-mobile-nav="frame"]:not([data-sidebar-drawer]):not([data-sidebar-collapsed]) > :first-child {');
+  const hideNativeControls = [
+    'html [data-mobile-nav="frame"][data-sidebar-collapsed] [data-pane="sidebar"] [data-dsh-responsive-part="sidebar-toggle"],',
+    'html [data-mobile-nav="frame"] [data-dsh-responsive-part="sidebar-toggle"],',
+    'html [data-mobile-nav="frame"] [class*="hHd-Xa_toggle"]:is([aria-label*="sidebar" i], [aria-label*="侧边栏"]),',
+    'html [data-mobile-nav="frame"] [data-conversation-header-leading] button[aria-label*="sidebar" i],',
+    'html [data-mobile-nav="frame"] [data-conversation-header-leading] button[aria-label*="侧边栏"],',
+    'html [data-mobile-nav="frame"] [data-shell-leading] button[aria-label*="sidebar" i],',
+    'html [data-mobile-nav="frame"] [data-shell-leading] button[aria-label*="侧边栏"] {',
+  ];
+  for (const rule of hideNativeControls) replace(rule,
+    rule.replace('[data-mobile-nav="frame"]', '[data-mobile-nav="frame"]:not([data-sidebar-drawer])'));
+  // DSH 0.2.2's official mask (z70) and sidebar (z71) already form a valid
+  // drawer. The legacy plugin must not append another z1250 mask on top of it.
+  replace('            const frame = (0, frame_ts_1.getFrame)();\n            if (frame === null)\n                return;\n            if (drawerOpen()) {',
+    '            const frame = (0, frame_ts_1.getFrame)();\n            if (frame === null)\n                return;\n            if (frame.hasAttribute("data-sidebar-drawer")) {\n                if (backdropRemoveTimer !== null) window.clearTimeout(backdropRemoveTimer);\n                backdropRemoveTimer = null;\n                backdrop?.remove();\n                backdrop = null;\n                fab?.remove();\n                fab = null;\n                faded = false;\n                fadeHook = null;\n                return;\n            }\n            if (drawerOpen()) {');
+  // The old swipe animation and nav tap helper also assumed child 1 was the
+  // sidebar; it is now the native mask. Defer to the new host's interactions.
+  replace('function closeDrawerAnimated(ctx) {\n    if (!drawerOpen())',
+    'function closeDrawerAnimated(ctx) {\n    if ((0, frame_ts_1.getFrame)()?.hasAttribute("data-sidebar-drawer")) return false;\n    if (!drawerOpen())');
+  replace('            (0, gesture_guard_ts_1.clearStrokeLocked)(); // belt-and-suspenders: a lost stroke must not leak its lock into this epoch\n            if (event.pointerType',
+    '            (0, gesture_guard_ts_1.clearStrokeLocked)(); // belt-and-suspenders: a lost stroke must not leak its lock into this epoch\n            if ((0, frame_ts_1.getFrame)()?.hasAttribute("data-sidebar-drawer")) {\n                if (trackingPointer !== 0) abortStroke(ctx);\n                return;\n            }\n            if (event.pointerType');
+  replace('        const drawerRoot = () => document.querySelector(\'[data-mobile-nav="frame"] > :first-child\');',
+    '        const drawerRoot = () => {\n            const frame = (0, frame_ts_1.getFrame)();\n            if (frame?.hasAttribute("data-sidebar-drawer")) {\n                const mask = frame.querySelector(":scope > [data-sidebar-mask]");\n                return mask?.nextElementSibling ?? null;\n            }\n            return frame?.firstElementChild ?? null;\n        };');
+
   return source;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

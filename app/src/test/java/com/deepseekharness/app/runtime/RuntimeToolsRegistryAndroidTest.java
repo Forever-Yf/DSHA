@@ -145,7 +145,7 @@ public final class RuntimeToolsRegistryAndroidTest {
     Context context = apkAssets(Map.of());
     JSONObject registry = RuntimeTools.readPatchRegistry(context);
     String version = registry.getString("dshVersion");
-    assertEquals("0.2.1-rc.2", version);
+    assertEquals("0.2.2-rc.1", version);
     assertEquals(version, Constants.DSH_VERSION);
     assertEquals("dsh-v" + version, Constants.DSH_RUNTIME_ID);
     try (var stream = context.getAssets().open("runtime-descriptor.json")) {
@@ -172,8 +172,8 @@ public final class RuntimeToolsRegistryAndroidTest {
     Context context = apkAssets(Map.of());
     JSONObject registry = RuntimeTools.readPatchRegistry(context);
     var groups = RuntimeTools.readPatchChains(context, registry, Constants.DSH_VERSION);
-    assertEquals(38, groups.size());
-    assertEquals(48, groups.values().stream().mapToInt(java.util.List::size).sum());
+    assertEquals(39, groups.size());
+    assertEquals(49, groups.values().stream().mapToInt(java.util.List::size).sum());
     assertTrue(
         groups.get("@deepseek-ai/dsh-config-editor/lib/index.js").stream()
             .anyMatch(
@@ -280,7 +280,7 @@ public final class RuntimeToolsRegistryAndroidTest {
             () ->
                 RuntimeTools.readPatchRegistry(
                     apkAssets(Map.of("runtime-patches.json", registry))));
-    assertEquals("PATCH_REGISTRY_VERSION: APK=0.2.1-rc.2 registry=0.2.0-rc.2", error.getMessage());
+    assertEquals("PATCH_REGISTRY_VERSION: APK=0.2.2-rc.1 registry=0.2.0-rc.2", error.getMessage());
   }
 
   @Test
@@ -308,7 +308,7 @@ public final class RuntimeToolsRegistryAndroidTest {
                 RuntimeTools.readPatchChains(
                     context, RuntimeTools.readPatchRegistry(context), Constants.DSH_VERSION));
     assertEquals(
-        "PATCH_REGISTRY_VERSION: recipe=" + first + " expected=0.2.1-rc.2 actual=0.2.0-rc.2",
+        "PATCH_REGISTRY_VERSION: recipe=" + first + " expected=0.2.2-rc.1 actual=0.2.0-rc.2",
         error.getMessage());
   }
 
@@ -552,6 +552,29 @@ public final class RuntimeToolsRegistryAndroidTest {
   }
 
   @Test
+  public void dsh022LanSettingsPreparationAcceptsExactPublishedBytesWithoutWriting()
+      throws Exception {
+    Context context = apkAssets(Map.of());
+    File guest = actualManagedModuleClosure(context);
+    Path module = guest.toPath().resolve(DSH + "node_modules/" + LAN);
+    Path pkg = guest.toPath().resolve(DSH + "package.json");
+    JSONObject contract = json("lan-settings-upstream-contract.json");
+    assertEquals("0.2.2-rc.1", new JSONObject(Files.readString(pkg)).getString("version"));
+    assertEquals(contract.getString("sourceSha256"), sha256(module));
+    byte[] initial = Files.readAllBytes(module);
+    RuntimeTools.patchLanSettingsPersistence(context, guest);
+    assertArrayEquals(initial, Files.readAllBytes(module));
+    RuntimeTools.patchLanSettingsPersistence(context, guest);
+    assertArrayEquals(initial, Files.readAllBytes(module));
+
+    // The predecessor publishes the same compiled source. Keep its explicit
+    // read path, but do not recognize any other DSH version by accident.
+    Files.writeString(pkg, new JSONObject(Files.readString(pkg)).put("version", "0.2.1-rc.2").toString());
+    RuntimeTools.patchLanSettingsPersistence(context, guest);
+    assertArrayEquals(initial, Files.readAllBytes(module));
+  }
+
+  @Test
   public void lanRetirementRejectsModuleDriftAndPreservesOriginalBytes() throws Exception {
     Context context = apkAssets(Map.of());
     File guest = actualManagedModuleClosure(context);
@@ -585,6 +608,13 @@ public final class RuntimeToolsRegistryAndroidTest {
     IOException contract =
         assertThrows(IOException.class, () -> RuntimeTools.patchLanSettingsPersistence(bad, guest));
     assertEquals("LAN_SETTINGS_CONTRACT", contract.getMessage());
+    JSONObject badVersions = json("lan-settings-upstream-contract.json").put(
+        "verifiedDshVersions",
+        new org.json.JSONArray().put("0.2.1-rc.2").put("0.2.3-rc.1"));
+    Context unverified = apkAssets(Map.of("lan-settings-upstream-contract.json", badVersions));
+    IOException unsupportedContract = assertThrows(
+        IOException.class, () -> RuntimeTools.patchLanSettingsPersistence(unverified, guest));
+    assertEquals("LAN_SETTINGS_CONTRACT", unsupportedContract.getMessage());
   }
 
   @Test

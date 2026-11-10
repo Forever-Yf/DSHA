@@ -1,0 +1,25 @@
+name: Verify existing fork signing key availability (no secrets output)
+on:
+  push:
+    branches: [fix/lan-settings-022-startup]
+    paths: [.github/workflows/lan-022-signing-readiness.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  readiness:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check whether the same-identity update can be signed
+        env:
+          HAS_KEY: ${{ secrets.DSHA_FORK_KEYSTORE_BASE64 != '' }}
+          HAS_PASSWORD: ${{ secrets.DSHA_FORK_KEYSTORE_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+          if [[ "$HAS_KEY" == 'true' && "$HAS_PASSWORD" == 'true' ]]; then
+            echo 'FORK_SIGNING_READY: existing private key and password secrets are configured.'
+          else
+            echo 'FORK_SIGNING_BLOCKED: existing fork signing key is not fully configured.'
+            echo 'A replacement signing certificate must never be generated for this update.'
+            exit 2
+          fi

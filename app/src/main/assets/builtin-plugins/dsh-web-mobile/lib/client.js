@@ -794,7 +794,7 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
   html [data-mobile-nav="frame"] {
     box-sizing: border-box !important;
     position: relative !important;
-    grid-template-columns: minmax(0, 1fr) 0 0 !important;
+    /* DSHA_NATIVE_DRAWER_022: keep native centre grid column 2 non-zero. */
     padding-top: env(safe-area-inset-top, 0px) !important;
     /* Bottom safe area, symmetric with the top inset above. It MUST stay in
        this rule: box-sizing: border-box is the pair that makes the padding eat
@@ -809,6 +809,10 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
        declaration and this one are the same property with the same value, so
        they do not stack. */
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
+
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) {
+    grid-template-columns: minmax(0, 1fr) 0 0 !important;
   }
 
   /* The sidebar column (first grid child) becomes a left drawer. The drawer
@@ -831,7 +835,7 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
      position/inset/width on the element, the column kept a correct-looking box
      while neither painting nor hit-testing, which is the "all black, click
      anywhere closes" root cause. The backdrop we append carries the dimming. */
-  [data-mobile-nav="frame"] > :first-child {
+  [data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {
     position: absolute !important;
     inset: 0 auto 0 0 !important;
     /* !important is load-bearing: the host ships
@@ -932,10 +936,10 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
      until: 上游提供不透明的面板填充接缝，或不再把 --dsw-specific-sidebar-fill 置空——届时本块删除
      test: tests/wallpaper-surface-fill.test.ts
   */
-  body[data-dsh-bg] [data-mobile-nav="frame"] > :first-child {
+  body[data-dsh-bg] [data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {
     background: var(--dsw-static-neutral-bluish-50, #f9fafb);
   }
-  body[data-ds-dark-theme][data-dsh-bg] [data-mobile-nav="frame"] > :first-child {
+  body[data-ds-dark-theme][data-dsh-bg] [data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {
     background: var(--dsw-static-neutral-bluish-900, #1b1b1c);
   }
 
@@ -954,7 +958,7 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
      a min(88vw, 280px) column translated -110% of its own width, i.e. -308px
      at 390px. The gesture layer never depended on this rule - it writes an
      inline transform !important - so only the CSS-driven click paths regressed. */
-  [data-mobile-nav="frame"][data-sidebar-collapsed] > :first-child {
+  [data-mobile-nav="frame"]:not([data-sidebar-drawer])[data-sidebar-collapsed] > :first-child {
     width: min(88vw, 280px) !important;
     transform: translateX(-110%) !important;
   }
@@ -968,7 +972,7 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
      overflow:hidden drawer to scrollLeft=102, and every static child (plus the
      fixed overlay) shifts 102px off-screen. With transform:none the overlay is
      viewport-anchored: it dims the full screen and the sheet sits at left:8. */
-  [data-mobile-nav="frame"]:not([data-sidebar-collapsed]) > :first-child {
+  [data-mobile-nav="frame"]:not([data-sidebar-drawer]):not([data-sidebar-collapsed]) > :first-child {
     transform: none !important;
   }
 
@@ -1001,9 +1005,9 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
      (0,4,1) and ends the tie - the outcome no longer depends on which sheet is
      injected later. The hash class and the label stay as fallbacks for hosts
      without that hook. */
-  html [data-mobile-nav="frame"][data-sidebar-collapsed] [data-pane="sidebar"] [data-dsh-responsive-part="sidebar-toggle"],
-  html [data-mobile-nav="frame"] [data-dsh-responsive-part="sidebar-toggle"],
-  html [data-mobile-nav="frame"] [class*="hHd-Xa_toggle"]:is([aria-label*="sidebar" i], [aria-label*="侧边栏"]),
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer])[data-sidebar-collapsed] [data-pane="sidebar"] [data-dsh-responsive-part="sidebar-toggle"],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-dsh-responsive-part="sidebar-toggle"],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [class*="hHd-Xa_toggle"]:is([aria-label*="sidebar" i], [aria-label*="侧边栏"]),
   /* The label-only fallbacks MUST stay scoped to the seats the host's own
      drawer handle can live in. Unscoped they match by aria-label substring,
      and the session row's ⋯ carries 会话“<title>”的操作 — so any session
@@ -1012,10 +1016,10 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
      display:none, row height unchanged, time shifted right by the 16px the
      button would have taken). Anchor them to the frame's leading seat and to
      the header's leading cell instead. */
-  html [data-mobile-nav="frame"] [data-conversation-header-leading] button[aria-label*="sidebar" i],
-  html [data-mobile-nav="frame"] [data-conversation-header-leading] button[aria-label*="侧边栏"],
-  html [data-mobile-nav="frame"] [data-shell-leading] button[aria-label*="sidebar" i],
-  html [data-mobile-nav="frame"] [data-shell-leading] button[aria-label*="侧边栏"] {
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-conversation-header-leading] button[aria-label*="sidebar" i],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-conversation-header-leading] button[aria-label*="侧边栏"],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-shell-leading] button[aria-label*="sidebar" i],
+  html [data-mobile-nav="frame"]:not([data-sidebar-drawer]) [data-shell-leading] button[aria-label*="侧边栏"] {
     display: none !important;
   }
 
@@ -1058,7 +1062,7 @@ exports.LAYOUT_CSS = `/* ---------- mobile-only layout (narrow viewport AND touc
      (audit S2 2026-08-27 — the old reduce block only covered the settings
      sheet and its mask). Same idiom as the animation:none blocks below. */
   @media (prefers-reduced-motion: reduce) {
-    [data-mobile-nav="frame"] > :first-child {
+    [data-mobile-nav="frame"]:not([data-sidebar-drawer]) > :first-child {
       transition: none !important;
     }
   }
@@ -7528,6 +7532,17 @@ function createOverlayTask(t, toggleSidebar, panelExit) {
             const frame = (0, frame_ts_1.getFrame)();
             if (frame === null)
                 return;
+            if (frame.hasAttribute("data-sidebar-drawer")) {
+                if (backdropRemoveTimer !== null) window.clearTimeout(backdropRemoveTimer);
+                backdropRemoveTimer = null;
+                backdrop?.remove();
+                backdrop = null;
+                fab?.remove();
+                fab = null;
+                faded = false;
+                fadeHook = null;
+                return;
+            }
             if (drawerOpen()) {
                 if (backdrop === null) {
                     backdrop = document.createElement('div');
@@ -9431,6 +9446,7 @@ function commitFollowClose(ctx) {
  * drawer is already closed (that call would OPEN it) or the user asked for
  * reduced motion, where the spec degrades the animation instead of adding one. */
 function closeDrawerAnimated(ctx) {
+    if ((0, frame_ts_1.getFrame)()?.hasAttribute("data-sidebar-drawer")) return false;
     if (!drawerOpen())
         return false;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches)
@@ -9837,6 +9853,10 @@ function installSidebarSwipe(ctx, filesToggle) {
             // instead of eating it at the document-capture click handler.
             consumedEl = null;
             (0, gesture_guard_ts_1.clearStrokeLocked)(); // belt-and-suspenders: a lost stroke must not leak its lock into this epoch
+            if ((0, frame_ts_1.getFrame)()?.hasAttribute("data-sidebar-drawer")) {
+                if (trackingPointer !== 0) abortStroke(ctx);
+                return;
+            }
             if (event.pointerType !== 'touch' && event.pointerType !== 'pen')
                 return;
             // A second finger means the browser owns this interaction (pinch zoom),
@@ -10063,7 +10083,14 @@ function installOverlayInteractions(ctx) {
         };
         // Capture phase: run before the shell or a plugin processes the click,
         // so takeover panels never render under the open drawer.
-        const drawerRoot = () => document.querySelector('[data-mobile-nav="frame"] > :first-child');
+        const drawerRoot = () => {
+            const frame = (0, frame_ts_1.getFrame)();
+            if (frame?.hasAttribute("data-sidebar-drawer")) {
+                const mask = frame.querySelector(":scope > [data-sidebar-mask]");
+                return mask?.nextElementSibling ?? null;
+            }
+            return frame?.firstElementChild ?? null;
+        };
         // Shared frame: inside the drawer, on a row navigation target, and not on
         // one of its buttons. Deliberately free of the DSHA tap-close exemption —
         // onDrawerPointerDown arms long-press through this base, and starving that

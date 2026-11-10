@@ -1,0 +1,60 @@
+name: Bind source-only LAN hotfix to existing locked 0.2.2 runtime descriptor
+on:
+  push:
+    branches: [fix/lan-settings-022-startup]
+    paths: [.github/workflows/lan-022-descriptor.yml]
+permissions:
+  contents: write
+jobs:
+  descriptor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Recalculate only the audited changed source inputs and preserve the runtime archive
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib, sys
+          sys.path.insert(0,'tools')
+          import importlib.util
+          spec=importlib.util.spec_from_file_location('descriptor_source', 'tools/verify-runtime-descriptor-source.py')
+          module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+          verify=module.verify
+          root=pathlib.Path('.');assets=root/'app/src/main/assets'
+          target=assets/'runtime-descriptor.json'
+          d=json.loads(target.read_text())
+          assert d['version']==1 and d['dshVersion']=='0.2.2-rc.1'
+          assert d['runtimeId']=='141f69625de771ff7d80def964388eae0423f238073d06ca6e0217ec55ee3b27'
+          pins={
+            'lan-settings-upstream-contract.json':'b4a8f2226f13bd5f499dcc0befcc816e60a739576a7e6640ee44156dc53207ba',
+            'runtime/RuntimeTools.java':'9216f1201c802adb0d39a650515de87ee9f8536eb49d639a4ef695c5c7cec356'
+          }
+          assert d['inputs']['lan-settings-upstream-contract.json']==pins['lan-settings-upstream-contract.json']
+          assert d['launcherInputs']['runtime/RuntimeTools.java']==pins['runtime/RuntimeTools.java']
+          contract=json.loads((assets/'lan-settings-upstream-contract.json').read_text())
+          assert contract['verifiedDshVersions']==['0.2.1-rc.2','0.2.2-rc.1']
+          assert contract['sourceSha256']=='0555eec2df1ca392a1167e637f287ac9963dbd2b0a230089c2a41be079c490e3'
+          def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
+          d['inputs']['lan-settings-upstream-contract.json']=digest(assets/'lan-settings-upstream-contract.json')
+          d['launcherInputs']['runtime/RuntimeTools.java']=digest(root/'app/src/main/java/com/deepseekharness/app/runtime/RuntimeTools.java')
+          fields=('baseVersion','dshVersion','launcherContract','launcherInputs','bridgeProtocol','dataRead','dataWrite','inputs')
+          d['runtimeId']=hashlib.sha256(json.dumps({k:d[k] for k in fields},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+          target.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n')
+          result=verify(root)
+          print(json.dumps({'status':'PASS','newRuntimeId':d['runtimeId'],'scope':'source-only',**result}))
+          PY
+      - name: Commit exact runtime identity without changing bundled DSH archive
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/assets/runtime-descriptor.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(runtime): bind LAN 0.2.2 verified compatibility fix to runtime descriptor'
+            git fetch origin fix/lan-settings-022-startup
+            git rebase origin/fix/lan-settings-022-startup
+            git push origin HEAD:fix/lan-settings-022-startup
+          fi

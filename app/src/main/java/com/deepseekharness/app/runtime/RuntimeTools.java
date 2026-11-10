@@ -454,12 +454,18 @@ final class RuntimeTools {
     try {
       File pkg = new File(rootfs, "usr/local/lib/node_modules/@deepseek-ai/dsh/package.json");
       String version = fileObject(pkg).getString("version");
-      if ("0.2.1-rc.2".equals(version)) {
-        // This upstream generation writes through the Host mirror for every client.
-        // Retire the old text replacement only for the signed, byte-exact implementation.
+      if ("0.2.1-rc.2".equals(version) || "0.2.2-rc.1".equals(version)) {
+        // 0.2.1-rc.2 and 0.2.2-rc.1 publish byte-identical client.js:
+        // verify the exact compiled bytes and Host persistence semantics for both.
+        // This is not a general version bypass; unknown upstream builds fail closed.
         var contract = assetObject(context, "lan-settings-upstream-contract.json");
+        var verified = contract.getJSONArray("verifiedDshVersions");
         if (contract.getInt("schema") != 1
-            || !version.equals(contract.getString("dshVersion"))
+            || !"0.2.1-rc.2".equals(contract.getString("dshVersion"))
+            || verified.length() != 2
+            || !"0.2.1-rc.2".equals(verified.getString(0))
+            || !"0.2.2-rc.1".equals(verified.getString(1))
+            || !(version.equals(verified.getString(0)) || version.equals(verified.getString(1)))
             || !"@deepseek-ai/dsh-client-ui-settings/lib/client.js"
                 .equals(contract.getString("module")))
           throw new IOException("LAN_SETTINGS_CONTRACT");

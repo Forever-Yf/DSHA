@@ -1,0 +1,70 @@
+name: Generate and verify DSH 0.2.2 native-drawer mobile fix
+on:
+  push:
+    branches: [fix/022-mobile-blank-frame]
+    paths: [.github/workflows/mobile-022-generate.yml]
+permissions:
+  contents: write
+jobs:
+  mobile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Apply pinned upstream mobile compiler patch, not untracked TypeScript edits
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,hashlib,pathlib
+          root=pathlib.Path('.')
+          lock=json.loads((root/'tools/mobile-plugin-upstream.lock.json').read_text())
+          src=root/'tools/mobile-plugin-upstream/lib/client.js'
+          assert lock['version']=='3.2.1' and hashlib.sha256(src.read_bytes()).hexdigest()==lock['files']['lib/client.js']['sha256']
+          PY
+          node tools/apply-mobile-client-patches.mjs tools/mobile-plugin-upstream/lib/client.js --write
+          node --check app/src/main/assets/builtin-plugins/dsh-web-mobile/lib/client.js
+          node --test tools/test-mobile-client-patches.mjs
+      - name: Update exactly two source-bound runtime descriptor hashes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,hashlib,pathlib,importlib.util,sys
+          root=pathlib.Path('.');assets=root/'app/src/main/assets';target=assets/'runtime-descriptor.json'
+          d=json.loads(target.read_text(encoding='utf-8'))
+          if d.get('runtimeId')!='6933348325610a922fa26942326b29ea9075d489c6d4b88fe5effc522674103a':
+              raise ValueError('MOBILE_BASELINE_DESCRIPTOR_ID_CHANGED')
+          assert d['version']==1 and d['dshVersion']=='0.2.2-rc.1'
+          changes={
+            ('inputs','builtin-plugins/dsh-web-mobile/lib/client.js'):assets/'builtin-plugins/dsh-web-mobile/lib/client.js',
+            ('launcherInputs','generator:tools/apply-mobile-client-patches.mjs'):root/'tools/apply-mobile-client-patches.mjs',
+          }
+          for (where,key),file in changes.items():
+              digest=hashlib.sha256(file.read_bytes()).hexdigest()
+              assert key in d[where] and d[where][key]!=digest,(where,key)
+              d[where][key]=digest
+          fields=('baseVersion','dshVersion','launcherContract','launcherInputs','bridgeProtocol','dataRead','dataWrite','inputs')
+          d['runtimeId']=hashlib.sha256(json.dumps({k:d[k] for k in fields},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+          target.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          sys.path.insert(0,'tools')
+          spec=importlib.util.spec_from_file_location('verified','tools/verify-runtime-descriptor-source.py')
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          report=mod.verify(root)
+          print(json.dumps({'status':'PASS','newRuntimeId':d['runtimeId'],**report}))
+          PY
+      - name: Commit exact compiled client and descriptor without changing upstream source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/assets/builtin-plugins/dsh-web-mobile/lib/client.js app/src/main/assets/runtime-descriptor.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(mobile): bind native DSH 0.2.2 drawer patch to exact client and runtime identity'
+            git fetch origin fix/022-mobile-blank-frame
+            git rebase origin/fix/022-mobile-blank-frame
+            git push origin HEAD:fix/022-mobile-blank-frame
+          fi
