@@ -1,0 +1,210 @@
+name: Publish DSH 0.2.2 fork.2 LAN startup fix using original certificate
+on:
+  push:
+    branches: [fix/lan-settings-022-startup]
+    paths: [.github/workflows/publish-lan-022-fork2.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-real-dsh-022-fork2
+  cancel-in-progress: false
+env:
+  BUILD_RUN: '42577207259'
+  BUILD_ARTIFACT: '13655792940'
+  BUILD_ARTIFACT_SHA: bf6ab31851d7f8bad96e33ac40a7dedae0db0c5a1571822d700306d7999f2584
+  BUILD_SOURCE: e939706c284504f84258264bc8de05169cec3cf8
+  RELEASE_TAG: v0.2.2-rc.1-fork.2
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          log-accepted-android-sdk-licenses: false
+      - name: Require the ORIGINAL fork.1 signer; never regenerate a different key
+        env:
+          HAS_KEY: ${{ secrets.DSHA_FORK_KEYSTORE_BASE64 != '' }}
+          HAS_PASSWORD: ${{ secrets.DSHA_FORK_KEYSTORE_PASSWORD != '' }}
+        run: |
+          if [[ "$HAS_KEY" != "true" || "$HAS_PASSWORD" != "true" ]]; then
+            echo "EXISTING_FORK_SIGNING_KEY_REQUIRED: set repository Actions Secrets before publishing an update." >&2
+            exit 2
+          fi
+      - name: Verify successful source-bound build and immutable artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/fork-release/{input,public,sealed}
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" > app/build/fork-release/run.json
+          python3 - <<'PY'
+          import json,os,pathlib
+          r=json.loads(pathlib.Path('app/build/fork-release/run.json').read_text())
+          assert r['status']=='completed' and r['conclusion']=='success'
+          assert r['path']=='.github/workflows/lan-022-build.yml'
+          assert r['head_sha']=='e939706c284504f84258264bc8de05169cec3cf8'
+          assert r['head_branch']=='fix/lan-settings-022-startup'
+          assert r['repository']['full_name']==os.environ['GITHUB_REPOSITORY']
+          PY
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$BUILD_ARTIFACT/zip" > app/build/fork-release/input.zip
+          echo "$BUILD_ARTIFACT_SHA  app/build/fork-release/input.zip" | sha256sum -c
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,shutil,zipfile,xml.etree.ElementTree as ET
+          root=pathlib.Path('app/build/fork-release');dest=root/'input';public=root/'public'
+          with zipfile.ZipFile(root/'input.zip') as z:
+              for info in z.infolist():
+                  p=pathlib.PurePosixPath(info.filename)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert ((info.external_attr>>16)&0o170000)!=0o120000
+              z.extractall(dest)
+          output=dest/'fork-022/output'
+          assert (output/'source-commit.txt').read_text().strip()==os.environ['BUILD_SOURCE']
+          apks=list(output.glob('*unsigned.apk'));assert len(apks)==1
+          expected=(output/'SHA256SUMS').read_text().split()[0]
+          assert re.fullmatch('[a-f0-9]{64}',expected)
+          h=hashlib.sha256()
+          with apks[0].open('rb') as f:
+              for b in iter(lambda:f.read(1048576),b''):h.update(b)
+          assert h.hexdigest()==expected
+          counts=dict(tests=0,failures=0,errors=0,skipped=0);classes=[]
+          for p in (dest/'test-results').rglob('TEST-*.xml'):
+              x=ET.parse(p).getroot();classes.append(x.get('name'))
+              for k in counts:counts[k]+=int(x.get(k,0))
+          assert counts['tests']>0 and not any(counts[k] for k in ('failures','errors','skipped')),counts
+          assert 'com.deepseekharness.app.util.ManagedPatchRegistryIntegrationTest' in classes
+          assert 'com.deepseekharness.app.runtime.RuntimeToolsRegistryAndroidTest' in classes
+          browser=json.loads((output/'browser/browser-state.json').read_text())
+          assert browser['integration']=='ready' and browser['mobile'] and not browser['errors']
+          lines=(output/'android-build.log').read_text().splitlines()
+          acceptance=[]
+          for line in lines:
+              try:v=json.loads(line)
+              except ValueError:continue
+              if isinstance(v,dict) and v.get('version')=='0.2.2-rc.1' and v.get('tests')==20:acceptance.append(v)
+          assert len(acceptance)==1 and acceptance[0]['status']=='PASS'
+          receipt=dict(buildRun=int(os.environ['BUILD_RUN']),sourceCommit=os.environ['BUILD_SOURCE'],junit=counts,junitClasses=classes,runtimeAcceptance=acceptance[0],browser=dict(integration=browser['integration'],mobile=browser['mobile'],errors=browser['errors']))
+          (public/'software-tests.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          shutil.copyfile(output/'source.tar.gz',public/'DSHA-0.2.2-rc.1-fork.2-source.tar.gz')
+          for name in ('runtime-descriptor.json','dsh-runtime.inputs.json','smoke-core.log','smoke-builtins.log'):
+              shutil.copyfile(output/name,public/name)
+          shutil.copyfile(output/'browser/browser.png',public/'mobile-ui-smoke.png')
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write('UNSIGNED_APK='+str(apks[0].resolve())+'\n')
+          print(json.dumps(receipt))
+          PY
+          git merge-base --is-ancestor "$BUILD_SOURCE" HEAD
+      - name: Exact Android signing tools and ARM64 software emulator
+        run: |
+          set -euo pipefail
+          sdkmanager 'build-tools;36.0.0'
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-user
+      - name: Verify embedded ARM64 runtime before accessing signing material
+        run: |
+          python3 tools/verify-fork-022-apk.py --apk "$UNSIGNED_APK" --sdk "$ANDROID_HOME" --work app/build/fork-release/unsigned-check
+      - name: Independently sign fork and encrypt owner backup
+        env:
+          DSHA_FORK_KEYSTORE_BASE64: ${{ secrets.DSHA_FORK_KEYSTORE_BASE64 }}
+          DSHA_FORK_KEYSTORE_PASSWORD: ${{ secrets.DSHA_FORK_KEYSTORE_PASSWORD }}
+        run: |
+          python3 tools/sign-fork-022-apk.py --apk "$UNSIGNED_APK" --sdk "$ANDROID_HOME" \
+            --out app/build/fork-release/public --sealed-out app/build/fork-release/sealed \
+            --recipient ci/fork-signing-backup-recipient.pem --identity ci/fork-release-identity.json
+      - name: Preserve encrypted backup separately; no plaintext key artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fork-signing-key-ENCRYPTED-owner-backup
+          path: app/build/fork-release/sealed/
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: Verify final signed APK bytes and record public signing identity
+        run: |
+          set -euo pipefail
+          python3 tools/verify-fork-022-apk.py --apk app/build/fork-release/public/dsha-0.2.2-rc.1-fork.2-arm64.apk \
+            --sdk "$ANDROID_HOME" --work app/build/fork-release/signed-check
+          cp app/build/fork-release/signed-check/apk-acceptance.json app/build/fork-release/public/
+          cp ci/fork-release-identity.json app/build/fork-release/public/
+          # This is an update of an existing installed package, never a key rotation.
+          # The publisher must preserve the pinned public certificate identity byte for byte.
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('ci/fork-release-identity.json')
+          data=json.loads(p.read_text(encoding='utf-8'))
+          assert data['certificateSha256']=='c3af4c583626770512aa26bf070c22d7ebe94c3d796cffe73e24b2de04f62bd5'
+          assert data['applicationId']=='io.github.foreveryf.dsha'
+          PY
+          git diff --exit-code -- ci/fork-release-identity.json
+      - name: Generate factual release notes from acceptance receipts
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path('app/build/fork-release/public');a=json.loads((p/'apk-acceptance.json').read_text());s=json.loads((p/'software-tests.json').read_text());i=json.loads((p/'fork-release-identity.json').read_text())
+          assert a['status']=='PASS' and a['qemuNodeAndCli'] and a['dshVersion']=='0.2.2-rc.1'
+          text=f'''# DSHA Fork 0.2.2-rc.1-fork.2
+
+          本版本修复了 fork.1 首次维护中的 `java.io.IOException: LAN_SETTINGS_VERSION`。使用相同 Fork 签名覆盖更新，保留 Android 应用数据；主运行时仍是 **DSH 0.2.2-rc.1**。不声称已经完成真实手机恢复验收。
+
+          ## 安装
+          下载 `dsha-0.2.2-rc.1-fork.2-arm64.apk`。标准版要求 **Android 11 / API 30 及以上、ARM64**。
+
+          包名 `{a['applicationId']}`，versionCode 192，release 构建且不可调试。使用与 fork.1 完全一致的 Fork 签名，可覆盖 fork.1；与原上游 DSHA 仍是不同应用，数据不会自动在两个不同包名之间迁移。保留原版和备份，首次使用新环境；旧完整备份的跨版本恢复未经真机验证，不建议直接导入全部数据。
+
+          ## 实际验证
+          - 锁定 npm 依赖与真实 Linux ARM64 0.2.2 归档，49 条受管补丁。
+          - 真实 Web 启动及 8 个内置插件；认证、未授权与无效令牌拒绝。
+          - 20 项真实 native/PTC 管线与 JSON 存储回归；工具为内存夹具，不执行设备命令。
+          - 选定 Java 单元测试：{s['junit']['tests']} 项，失败/错误/跳过均为 0，包含实际补丁链的幂等与修复检查。
+          - Chromium 手机尺寸界面初始化，插件 ready，无页面错误。
+          - 从实际 APK 提取的 ARM64 Node `{a['guestNode']}` 及 DSH CLI 通过 QEMU 执行，CLI 返回 `0.2.2-rc.1`。
+          - 最终 APK 的包名、ABI、最低版本、不可调试标记、归档摘要、v1/v2/v3 签名及 16 KiB ZIP 对齐检查。
+
+          **验证限制：** 未进行真实 Android 手机/proot/OEM 长时运行、无障碍/ADB/Root 操作或付费模型对话测试。本版本标为预发布，不等同于完整真机验收。独立应急修复运行时仍保留原固定 0.2.1 版本，与主运行时分离。
+
+          ## 身份与来源
+          - 编译源提交：`{os.environ['BUILD_SOURCE']}`
+          - 构建与测试：https://github.com/Forever-Yf/DSHA/actions/runs/{os.environ['BUILD_RUN']}
+          - APK 字节数：`{a['apkBytes']}`
+          - APK SHA-256：`{a['apkSha256']}`
+          - 主运行时 SHA-256：`{a['runtimeSha256']}`
+          - Fork 签名证书 SHA-256：`{i['certificateSha256']}`
+
+          附带实际 APK 验证报告、测试摘要、校验文件、公开证书和匹配源码。源码归档不包含大型离线输入，重建按仓库工作流取得 SHA-256 固定的原始输入并执行 npm ci。签名私钥不在公开仓库、Release 或明文日志中；后续更新必须保持同一 Fork 签名。
+          '''
+          (p/'RELEASE_NOTES.md').write_text('\n'.join(line[10:] if line.startswith('          ') else line for line in text.splitlines())+'\n',encoding='utf-8')
+          print(json.dumps(a))
+          PY
+      - name: Publish the verified real 0.2.2 APK as prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" app/build/fork-release/public/* \
+            --repo "$GITHUB_REPOSITORY" --target "$BUILD_SOURCE" --prerelease \
+            --title 'DSHA Fork 0.2.2-rc.1 · ARM64 标准版' \
+            --notes-file app/build/fork-release/public/RELEASE_NOTES.md
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '{url: .url, files: [.assets[].name]}'
+      - name: Retain compact verification and failure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: real-022-public-receipts
+          path: |
+            app/build/fork-release/public/*.json
+            app/build/fork-release/public/*.log
+            app/build/fork-release/public/*.txt
+            app/build/fork-release/public/*.sha256
+            app/build/fork-release/public/*.png
+            app/build/fork-release/public/*.md
+            app/build/fork-release/unsigned-check/apk-acceptance.json
+          if-no-files-found: warn
+          retention-days: 14
