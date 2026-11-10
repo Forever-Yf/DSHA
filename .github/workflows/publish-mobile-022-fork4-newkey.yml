@@ -1,4 +1,5 @@
 name: Publish DSHA 0.2.2 fork.4 with verified nonblank native mobile frame
+# Registered default-branch publisher; this branch push triggers the pinned exact source-artifact release.
 on:
   workflow_dispatch:
 permissions:
