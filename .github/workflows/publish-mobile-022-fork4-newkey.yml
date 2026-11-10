@@ -31,6 +31,7 @@ jobs:
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
         with:
           log-accepted-android-sdk-licenses: false
+      # Pinned to the successful, nonblank 393px mobile geometry build; never sign an unverified APK.
       - name: Verify successful source-bound candidate build and immutable artifact
         env:
           GH_TOKEN: ${{ github.token }}
